@@ -33,7 +33,7 @@ The Codex installer **copies and adjusts** the skills. Seven optional role defin
 | `roblox-animation` | Headless Blender workflows for R6/R15 animations |
 | `roblox-skills-setup` | Detects/configures local dependencies and per-skill `LOCAL.md` files |
 
-Seven original role definitions live in [`agents/`](agents/): `roblox-asset-anim`, `roblox-asset-map`, `roblox-asset-mesh`, `roblox-asset-sfx`, `roblox-asset-ui`, `roblox-asset-vfx`, and `roblox-market-scout`. The Codex installer generates corresponding TOML files **only when explicitly opted in after checking tool isolation**. Runtime agent discovery, delegation, and tool restrictions still need to be checked in the installed Codex environment.
+Seven original role definitions live in [`agents/`](agents/): `roblox-asset-anim`, `roblox-asset-map`, `roblox-asset-mesh`, `roblox-asset-sfx`, `roblox-asset-ui`, `roblox-asset-vfx`, and `roblox-market-scout`. The Codex installer generates corresponding TOML files **only after explicit opt-in acknowledging inherited MCP risk, for Studio-free sessions**. Runtime agent discovery, delegation, and tool restrictions still need to be checked in the installed Codex environment.
 
 ### Workflow at a glance
 
@@ -85,7 +85,7 @@ python codex/install.py --scope project --project-root "/path/to/your/project"
 python codex/install.py --scope project --project-root "/path/to/your/project" --apply
 ```
 
-Project scope writes skill copies into that project's `.agents/skills/`. Optional role TOML goes into `.codex/agents/` only after isolation is verified. The installer defaults to a **dry run**; `--apply` is required to change files. It refuses to replace existing installations unless you explicitly use `--force --apply`, which backs up old skill/agent paths under `.codex-backups/` and carries forward existing `LOCAL.md` files. Review local settings before replacing anything.
+Project scope writes skill copies into that project's `.agents/skills/`. Optional role TOML goes into `.codex/agents/` only after isolation is verified. The installer defaults to a **dry run**; `--apply` is required to change files. It scans existing custom agent TOML files across user and project scopes, blocking sequential-default installation when legacy roles remain. It refuses to replace existing installations unless you explicitly use `--force --apply`, which backs up old skill/agent paths under `.codex-backups/` and carries forward existing `LOCAL.md` files. Review local settings before replacing anything.
 
 After installation, open Codex in the relevant workspace, confirm that the skills are discoverable, and invoke a skill by name, for example:
 
@@ -130,7 +130,7 @@ For local configuration and optional stages, inspect [`roblox-skills-setup`](ski
 
 ## Codex subagents and Studio safety
 
-The adapter can translate Claude's seven Markdown agent descriptions into Codex TOML instructions, but it **installs no custom agent roles by default**. Until Studio MCP access is isolated and verified, asset stages must run sequentially. It **does not translate or enforce** Claude-specific `tools`, `disallowedTools`, `model`, `maxTurns`, or `skills` front matter.
+The adapter can translate seven Markdown roles into Codex TOML, but it **installs no custom roles by default**. The optional inheritance-risk acknowledgment does not enforce Studio isolation. Until Studio MCP access is isolated and verified, asset stages must run sequentially. It **does not translate or enforce** Claude-specific `tools`, `disallowedTools`, `model`, `maxTurns`, or `skills` front matter.
 
 - **Check runtime support.** Confirm Codex actually discovers the generated agent roles and has an available delegation mechanism. A TOML file on disk alone is not evidence a subagent ran.
 - **Restrict tools at the execution layer.** A worker prompt saying "never use Studio" is **not** an enforced MCP permission boundary. Codex subagents may inherit the parent session's available tools and permissions; configure/review actual tool access before delegating.

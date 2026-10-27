@@ -31,13 +31,10 @@ python codex/install.py --scope project --project-root "/path/to/game-repo" --ap
 
 This installs skill copies into that project's `.agents/skills/`; optional
 subagent definitions go to `.codex/agents/` only after explicit opt-in.
-Paths embedded in installed text are adjusted to that destination. Install
-does not clone, initialize, or modify a Roblox game on its own.
+Project-scoped examples use relative project-root paths; installed setup scripts derive locations from their file location, so moving a project does not embed obsolete absolute paths. Install does not create or modify a Roblox game.
 
 The installer refuses to replace an installed skill or agent by default.
-Use `--force --apply` to create a timestamped backup under
-`.codex-backups/` and preserve existing per-skill `LOCAL.md`. Never put
-secrets in `LOCAL.md`. Review diffs and back up personal data independently.
+Use `--force --apply` to create a uniquely named backup under `.codex-backups/` and preserve existing `LOCAL.md`. Backup paths are prechecked; recoverable errors trigger best-effort rollback. This is not crash-atomic. Keep secrets out of `LOCAL.md`.
 
 ## How to invoke
 
@@ -70,20 +67,16 @@ The default Codex installation is deliberately **sequential**. No custom
 agent roles are installed, because custom agents can inherit the parent
 session's MCP tools, including Roblox Studio tools.
 
-If a real Codex session has independently verified that Studio MCP tools are
-not accessible to subagents, you may explicitly opt in:
+Custom agents may inherit parent MCP tools. Only opt in for a separately verified Studio-free Codex session. The installer rejects enabled Studio/Roblox MCP in known configurations, but it cannot prove live tool isolation. This flag acknowledges inheritance risk:
 
 ```bash
-python codex/install.py --scope user --enable-custom-agents --confirm-studio-isolation
+python codex/install.py --scope user --enable-custom-agents --accept-subagent-mcp-inheritance
 # After checking the dry run and approving installation:
-python codex/install.py --scope user --enable-custom-agents --confirm-studio-isolation --apply
+python codex/install.py --scope user --enable-custom-agents --accept-subagent-mcp-inheritance --apply
 ```
 
-`--confirm-studio-isolation` is an **operator assertion**, not an automated
-security test. Never use it without evidence from the target runtime.
-An existing Codex installation may already contain custom agent TOML from
-an older adapter; those files are not automatically removed by a new install.
-Inspect and disable them before relying on sequential-only operation.
+`--accept-subagent-mcp-inheritance` is explicit **risk acceptance**, not proof of Studio MCP isolation. Built-in Codex agents may also inherit parent tools. Do not delegate Studio-connected work.
+An existing Codex installation may contain custom TOML roles from any source. A default --apply scans global, CODEX_HOME, and project ancestor agent locations and refuses to proceed if roles exist. Dry-run displays them; built-in workers remain unaffected. Explicitly disable multi-agent support in effective Codex config when Studio is connected.
 
 When opted in, the installer converts the seven `agents/*.md` role descriptions
 into standalone TOML under the Codex agent directory. The conversion carries over
@@ -94,11 +87,11 @@ Codex runtime and surface support for custom subagents can vary. Confirm the
 available spawn tool and whether the intended role is actually selected
 before trusting a parallel build. In particular:
 
-- Asset workers produce separate files and manifests; they never call Studio.
+- Asset workers must not access Studio; their prompts do not enforce MCP permissions.
 - The primary Codex session alone applies assets, tests in Studio, and publishes.
 - A permission statement in a TOML prompt is **not** an MCP tool allow/deny list.
   Use Codex session permissions/tool exposure to enforce Studio isolation.
-- If custom roles or safe fan-out are unavailable, perform stages sequentially
+- In Studio-enabled sessions, perform stages sequentially
   and record that fallback. Do not report parallelism that did not occur.
 - The `roblox-build-orchestrator` ledger, failure gates, and handoffs remain
   required regardless of whether execution is sequential or parallel.

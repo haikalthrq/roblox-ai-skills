@@ -64,6 +64,7 @@ class CodexInstallerTests(unittest.TestCase):
                 'from pathlib import Path\nHOME = Path.home()\n'
                 'SKILLS_DIR = HOME / ".claude" / "skills"\n'
                 'AGENTS_DIR = HOME / ".claude" / "agents"\n'
+                'SKILLS = [\n]\n'
                 'def studio_mcp() -> str:\n    return "Claude"\n'
                 '\ndef main() -> int:\n'
                 '    roles = AGENTS_DIR.glob("roblox-*.md")\n    return 0\n',
@@ -78,7 +79,7 @@ class CodexInstallerTests(unittest.TestCase):
             self.assertIn("roblox-*.toml", output)
             self.assertIn("codex mcp list", output)
             self.assertNotIn('HOME / ".claude" / "skills"', output)
-            self.assertIn(str(base / "project" / ".codex" / "agents"), output)
+            self.assertIn("SKILLS_DIR.parents[1]", output)
 
     def test_executable_fallback_paths_relocated(self):
         import ast
@@ -87,10 +88,10 @@ class CodexInstallerTests(unittest.TestCase):
             for filename, original, expected in (
                 ("new_game.py",
                  'CODE_SKILL = Path.home() / ".claude" / "skills" / "roblox-code" / "scripts" / "new_project.py"',
-                 'Path(__file__).resolve().parents[2] / "roblox-code"'),
+                 'Path.home() / ".agents" / "skills" / "roblox-code"'),
                 ("preflight.py",
                  'SKILLS = Path.home() / ".claude" / "skills"',
-                 'SKILLS = Path(__file__).resolve().parents[2]'),
+                 'SKILLS = Path.home() / ".agents" / "skills"'),
             ):
                 new = adapter.adapt_python_runtime(
                     src, src / "scripts" / filename,
@@ -126,14 +127,14 @@ class CodexInstallerTests(unittest.TestCase):
                 opts = argparse.Namespace(
                     scope="project", project_root=base / "target",
                     apply=True, force=False,
-                    enable_custom_agents=False, confirm_studio_isolation=False,
+                    enable_custom_agents=False, accept_subagent_mcp_inheritance=False,
                 )
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(adapter.install(opts), 0)
                 self.assertTrue((base / "target" / ".agents" / "skills" / "example" / "SKILL.md").exists())
                 self.assertFalse((base / "target" / ".codex" / "agents" / "roblox-asset-map.toml").exists())
                 opts.enable_custom_agents = True
-                with self.assertRaisesRegex(RuntimeError, "Verify actual tool isolation"):
+                with self.assertRaisesRegex(RuntimeError, "Custom agents inherit parent MCP"):
                     adapter.install(opts)
             finally:
                 adapter.SKILL_SOURCE, adapter.AGENT_SOURCE = old_skills, old_agents
