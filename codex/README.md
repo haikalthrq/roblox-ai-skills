@@ -63,8 +63,11 @@ python codex/install.py --scope project --project-root "/path/to/project" \
 For user scope use `--scope user` and a transaction under `~/.codex-backups/`.
 `--recover` **mutates files** and requires explicit authorization; it is
 never automatic. The recovery verifies generated destinations **and the original backups** against recorded fingerprints before undoing moves. Unknown edits to installed artifacts are left untouched and
-cause an explicit refusal. Files never backed up are not guessed at; inspect
-the recovered tree and use setup checks before retrying the installer.
+cause an explicit refusal. An originally-existing destination without a backup is preserved only when
+its fingerprint still matches the original journal fingerprint. Missing
+backups with staged or edited destinations block recovery rather than
+reporting success. Inspect the recovered tree and use setup checks before
+retrying the installer.
 
 Locks are not auto-stolen by PID or age, because a PID may be reused and
 removing a live lock can cause data loss. The supported recovery handles
