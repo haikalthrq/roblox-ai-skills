@@ -81,6 +81,72 @@ def replace_claude_paths(text: str, skill_dir: Path, agent_dir: Path) -> str:
     return text
 
 
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    """Fail closed when upstream source has changed unexpectedly."""
+    if text.count(old) != 1:
+        raise ValueError(f"Codex adapter cannot locate {label}: expected exactly one occurrence")
+    return text.replace(old, new, 1)
+
+
+def adapt_python_runtime(source: Path, path: Path, text: str,
+                         skill_dir: Path, agent_dir: Path) -> str:
+    """Patch executable platform assumptions only in the installed copies."""
+    if source.name == "roblox-skills-setup" and path.name == "check_setup.py":
+        text = replace_once(
+            text,
+            'SKILLS_DIR = HOME / ".claude" / "skills"\nAGENTS_DIR = HOME / ".claude" / "agents"',
+            f"SKILLS_DIR = Path({json.dumps(str(skill_dir))})\n"
+            f"AGENTS_DIR = Path({json.dumps(str(agent_dir))})",
+            "Codex skill and role location",
+        )
+        text = replace_once(text, 'AGENTS_DIR.glob("roblox-*.md")',
+                            'AGENTS_DIR.glob("roblox-*.toml")',
+                            "Codex TOML roles")
+        begin = "def studio_mcp() -> str:\n"
+        end = "\ndef main() -> int:\n"
+        if text.count(begin) != 1 or text.count(end) != 1:
+            raise ValueError("Studio MCP detection function not found")
+        prefix, remainder = text.split(begin, 1)
+        _, suffix = remainder.split(end, 1)
+        detection = '''def studio_mcp() -> str:
+    """Inspect Codex TOML configuration without claiming runtime connectivity."""
+    import tomllib
+
+    configs = (Path.cwd() / ".codex" / "config.toml",
+               Path.home() / ".codex" / "config.toml")
+    for cfg in dict.fromkeys(configs):
+        try:
+            data = tomllib.loads(cfg.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        servers = data.get("mcp_servers", {})
+        if not isinstance(servers, dict):
+            continue
+        hits = sorted(k for k in servers if "roblox" in k.lower() or "studio" in k.lower())
+        if hits:
+            return (f"configured as {', '.join(hits)} in {cfg}; NOT CONNECTIVITY-VERIFIED. "
+                    "Check codex mcp list and call get_studio_state in Roblox Studio.")
+    return ("Codex Studio MCP not found in inspected configs; NOT CONNECTIVITY-VERIFIED. "
+            "Check codex mcp list and call get_studio_state in Roblox Studio.")
+
+'''
+        text = prefix + detection + end + suffix
+    elif source.name == "create-roblox-game" and path.name == "new_game.py":
+        text = replace_once(
+            text,
+            'CODE_SKILL = Path.home() / ".claude" / "skills" / "roblox-code" / "scripts" / "new_project.py"',
+            'CODE_SKILL = Path(__file__).resolve().parents[2] / "roblox-code" / "scripts" / "new_project.py"',
+            "new_game.py code skill",
+        )
+    elif source.name == "create-roblox-game" and path.name == "preflight.py":
+        text = replace_once(text,
+            'SKILLS = Path.home() / ".claude" / "skills"',
+            'SKILLS = Path(__file__).resolve().parents[2]',
+            "preflight.py fallback",
+        )
+    return text
+
 def adapt_skill(source: Path, destination: Path, skill_dir: Path, agent_dir: Path) -> None:
     shutil.copytree(source, destination)
     for path in destination.rglob("*"):
@@ -91,6 +157,8 @@ def adapt_skill(source: Path, destination: Path, skill_dir: Path, agent_dir: Pat
         except UnicodeDecodeError:
             continue
         after = replace_claude_paths(before, skill_dir, agent_dir)
+        if path.suffix.lower() == ".py":
+            after = adapt_python_runtime(source, path, after, skill_dir, agent_dir)
         if path.name == "SKILL.md":
             match = re.match(r"\A(---\r?\n.*?\r?\n---\r?\n)", after, re.DOTALL)
             if not match:
@@ -168,12 +236,29 @@ def install(args: argparse.Namespace) -> int:
         raise RuntimeError("Python 3.11 or newer is required")
     skill_dir, agent_dir, backup_root = targets(args.scope, args.project_root)
     skills = sorted(p for p in SKILL_SOURCE.iterdir() if p.is_dir() and (p / "SKILL.md").is_file())
-    agents = sorted(AGENT_SOURCE.glob("*.md"))
-    if not skills or not agents:
+    available_agents = sorted(AGENT_SOURCE.glob("*.md"))
+    if not skills or not available_agents:
         raise RuntimeError("Missing skills/ or agents/ in the checked-out pack")
+    if args.enable_custom_agents and not args.confirm_studio_isolation:
+        raise RuntimeError(
+            "Subagents can inherit parent Studio MCP tools. Verify actual tool isolation "
+            "before enabling roles, then supply --confirm-studio-isolation."
+        )
+    agents = available_agents if args.enable_custom_agents else []
+    installed_unchecked = [agent_dir / (p.stem + ".toml")
+                           for p in available_agents
+                           if (agent_dir / (p.stem + ".toml")).exists()]
+    if installed_unchecked and not args.enable_custom_agents:
+        print("WARNING: pre-existing Codex custom roles are still present:", file=sys.stderr)
+        for role in installed_unchecked:
+            print(f"  {role}", file=sys.stderr)
+        if args.apply:
+            raise RuntimeError("Remove or isolate existing roles before sequential-mode install")
     paths = [skill_dir / p.name for p in skills] + [agent_dir / (p.stem + ".toml") for p in agents]
     conflicts = [p for p in paths if p.exists()]
-    print(f"Scope: {args.scope}; skills: {len(skills)}; roles: {len(agents)}")
+    print(f"Scope: {args.scope}; skills: {len(skills)}; roles: {len(agents)} / {len(available_agents)}")
+    if not args.enable_custom_agents:
+        print("Sequential mode: no custom roles installed; MCP inheritance not assumed safe.")
     print(f"Skills destination: {skill_dir}")
     print(f"Agent destination: {agent_dir}")
     if conflicts:
@@ -192,6 +277,7 @@ def install(args: argparse.Namespace) -> int:
     # Assemble the complete install before touching destinations.
     with tempfile.TemporaryDirectory(prefix="roblox-codex-") as temp:
         staged = Path(temp)
+        (staged / "agents").mkdir(parents=True, exist_ok=True)
         for source in skills:
             adapt_skill(source, staged / "skills" / source.name, skill_dir, agent_dir)
         for source in agents:
@@ -221,7 +307,7 @@ def install(args: argparse.Namespace) -> int:
                 shutil.move(str(item), str(dest))
                 print(f"Installed: {dest}")
 
-    print("Codex skill instructions and subagent definitions are installed.")
+    print("Codex skills installed. Custom roles installed only if explicitly enabled.")
     print("No dependencies were installed, no tests ran, and no Studio connection was opened.")
     print("See codex/README.md for MCP setup, tool checks, and the first smoke-test gate.")
     return 0
@@ -233,6 +319,10 @@ def main() -> int:
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     parser.add_argument("--apply", action="store_true", help="Write files (default is dry-run)")
     parser.add_argument("--force", action="store_true", help="Back up and replace existing installed files")
+    parser.add_argument("--enable-custom-agents", action="store_true",
+                        help="Explicit opt-in to custom roles after verifying runtime tool isolation")
+    parser.add_argument("--confirm-studio-isolation", action="store_true",
+                        help="Operator confirms Studio MCP cannot be accessed by subagents")
     return install(parser.parse_args())
 
 

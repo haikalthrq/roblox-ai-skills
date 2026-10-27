@@ -53,5 +53,92 @@ class CodexInstallerTests(unittest.TestCase):
             self.assertEqual((src / "SKILL.md").read_text(encoding="utf-8").count("Codex"), 0)
 
 
+    def test_setup_checks_codex_directories_and_toml(self):
+        import ast
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            src = base / "roblox-skills-setup"
+            script = src / "scripts" / "check_setup.py"
+            script.parent.mkdir(parents=True)
+            script.write_text(
+                'from pathlib import Path\nHOME = Path.home()\n'
+                'SKILLS_DIR = HOME / ".claude" / "skills"\n'
+                'AGENTS_DIR = HOME / ".claude" / "agents"\n'
+                'def studio_mcp() -> str:\n    return "Claude"\n'
+                '\ndef main() -> int:\n'
+                '    roles = AGENTS_DIR.glob("roblox-*.md")\n    return 0\n',
+                encoding="utf-8",
+            )
+            output = adapter.adapt_python_runtime(
+                src, script, script.read_text(encoding="utf-8"),
+                base / "project" / ".agents" / "skills",
+                base / "project" / ".codex" / "agents",
+            )
+            ast.parse(output)
+            self.assertIn("roblox-*.toml", output)
+            self.assertIn("codex mcp list", output)
+            self.assertNotIn('HOME / ".claude" / "skills"', output)
+            self.assertIn(str(base / "project" / ".codex" / "agents"), output)
+
+    def test_executable_fallback_paths_relocated(self):
+        import ast
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "create-roblox-game"
+            for filename, original, expected in (
+                ("new_game.py",
+                 'CODE_SKILL = Path.home() / ".claude" / "skills" / "roblox-code" / "scripts" / "new_project.py"',
+                 'Path(__file__).resolve().parents[2] / "roblox-code"'),
+                ("preflight.py",
+                 'SKILLS = Path.home() / ".claude" / "skills"',
+                 'SKILLS = Path(__file__).resolve().parents[2]'),
+            ):
+                new = adapter.adapt_python_runtime(
+                    src, src / "scripts" / filename,
+                    "from pathlib import Path\n" + original + "\n",
+                    Path(tmp) / ".agents" / "skills", Path(tmp) / ".codex" / "agents"
+                )
+                ast.parse(new)
+                self.assertIn(expected, new)
+
+    def test_default_install_exposes_no_subagents(self):
+        import argparse
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            skills = base / "source" / "skills"
+            agents = base / "source" / "agents"
+            skill = skills / "example"
+            skill.mkdir(parents=True)
+            agents.mkdir(parents=True)
+            (skill / "SKILL.md").write_text(
+                "---\nname: example\ndescription: Example\n---\n# Example\n",
+                encoding="utf-8",
+            )
+            (agents / "roblox-asset-map.md").write_text(
+                "---\nname: roblox-asset-map\ndescription: Asset map worker\n"
+                "skills:\n  - example\n---\nRead data only.\n",
+                encoding="utf-8",
+            )
+            old_skills, old_agents = adapter.SKILL_SOURCE, adapter.AGENT_SOURCE
+            try:
+                adapter.SKILL_SOURCE, adapter.AGENT_SOURCE = skills, agents
+                opts = argparse.Namespace(
+                    scope="project", project_root=base / "target",
+                    apply=True, force=False,
+                    enable_custom_agents=False, confirm_studio_isolation=False,
+                )
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(adapter.install(opts), 0)
+                self.assertTrue((base / "target" / ".agents" / "skills" / "example" / "SKILL.md").exists())
+                self.assertFalse((base / "target" / ".codex" / "agents" / "roblox-asset-map.toml").exists())
+                opts.enable_custom_agents = True
+                with self.assertRaisesRegex(RuntimeError, "Verify actual tool isolation"):
+                    adapter.install(opts)
+            finally:
+                adapter.SKILL_SOURCE, adapter.AGENT_SOURCE = old_skills, old_agents
+
+
+
 if __name__ == "__main__":
     unittest.main()

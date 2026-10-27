@@ -14,6 +14,8 @@ to make a Codex install work.
   test execution, Studio mutations, or publication without user authorization.
 - Preserve the original requirement that only one main session writes to
   Roblox Studio. File-only asset workers must have disjoint output paths.
+- Codex roles must be opt-in after verifying MCP/tool isolation in the target
+  runtime. Without that evidence, prefer sequential asset processing.
 - Do not use Kaggle for this pack's disabled GPU pipeline. Do not expose keys.
 - For Project Antares integrations, consult the actual game project's
   authoritative decisions and Wayfinder material before work. Do not assume

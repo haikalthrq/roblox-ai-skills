@@ -1,8 +1,9 @@
 # Codex adapter for Roblox AI Skills
 
 This repository is a Claude Code-originated skill pack. The Codex adapter
-creates working **copies** of all 11 skills and converts the seven agent
-definitions to Codex custom-agent TOML. The upstream `skills/`, `agents/`,
+creates working **copies** of all 11 skills. Conversion of the seven agent
+definitions to Codex TOML is **off by default**: subagents may inherit the
+parent session's Studio MCP access. The upstream `skills/`, `agents/`,
 `install.sh`, and `install.ps1` remain unchanged.
 
 ## Install into Codex
@@ -17,8 +18,9 @@ python codex/install.py --scope user
 python codex/install.py --scope user --apply
 ```
 
-By default, installed skill folders go to `~/.agents/skills/<name>/`,
-and generated subagent definitions go to `~/.codex/agents/<name>.toml`.
+Installed skill folders go to `~/.agents/skills/<name>/`. Agent definitions
+are **not installed by default**; after an explicit opt-in, they go to
+`~/.codex/agents/<name>.toml`.
 
 To install only for a particular project instead of the whole user account:
 
@@ -27,7 +29,8 @@ python codex/install.py --scope project --project-root "/path/to/game-repo"
 python codex/install.py --scope project --project-root "/path/to/game-repo" --apply
 ```
 
-This installs into that project's `.agents/skills/` and `.codex/agents/`.
+This installs skill copies into that project's `.agents/skills/`; optional
+subagent definitions go to `.codex/agents/` only after explicit opt-in.
 Paths embedded in installed text are adjusted to that destination. Install
 does not clone, initialize, or modify a Roblox game on its own.
 
@@ -63,8 +66,27 @@ and explicitly approving installations or checks. For the Studio MCP:
 
 ## Subagents and orchestration
 
-The installer converts the seven `agents/*.md` role descriptions into
-standalone TOML under the Codex agent directory. The conversion carries over
+The default Codex installation is deliberately **sequential**. No custom
+agent roles are installed, because custom agents can inherit the parent
+session's MCP tools, including Roblox Studio tools.
+
+If a real Codex session has independently verified that Studio MCP tools are
+not accessible to subagents, you may explicitly opt in:
+
+```bash
+python codex/install.py --scope user --enable-custom-agents --confirm-studio-isolation
+# After checking the dry run and approving installation:
+python codex/install.py --scope user --enable-custom-agents --confirm-studio-isolation --apply
+```
+
+`--confirm-studio-isolation` is an **operator assertion**, not an automated
+security test. Never use it without evidence from the target runtime.
+An existing Codex installation may already contain custom agent TOML from
+an older adapter; those files are not automatically removed by a new install.
+Inspect and disable them before relying on sequential-only operation.
+
+When opted in, the installer converts the seven `agents/*.md` role descriptions
+into standalone TOML under the Codex agent directory. The conversion carries over
 the **role instructions**, not Claude's `tools`, `disallowedTools`, `model`,
 `maxTurns`, or `skills` runtime semantics.
 
@@ -83,7 +105,9 @@ before trusting a parallel build. In particular:
 
 ## What has and has not been verified
 
-The adapter is a source-level conversion. Static review of this repository
+The adapter is a source-level conversion. Installed copies now adjust
+`check_setup.py` environment discovery, `new_game.py` skill lookup, and
+`preflight.py` fallback paths for Codex. Static review of this repository
 is **not** proof of Codex role selection, Studio MCP access, tests passing,
 or a functioning generated game. After an explicitly approved local install,
 validate in this order: confirm Codex skill discovery; confirm agent

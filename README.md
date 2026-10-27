@@ -11,11 +11,11 @@ This is a community fork of [SyphoDev's original `roblox-ai-skills`](https://git
 | Status | Original upstream workflow, preserved in this fork | Adapter implemented; runtime integration unverified |
 | Installer | `install.ps1` (Windows) / `install.sh` (macOS/Linux) | `codex/install.py` (Windows/macOS/Linux with Python 3.11+) |
 | Skill location | `~/.claude/skills/` | `~/.agents/skills/` (user) or `<project>/.agents/skills/` |
-| Agent definitions | `~/.claude/agents/*.md` | `~/.codex/agents/*.toml` (user) or `<project>/.codex/agents/` |
+| Agent definitions | `~/.claude/agents/*.md` | Not installed by default; optional TOML under `~/.codex/agents/` or `<project>/.codex/agents/` |
 | Invoke a skill | `/roblox-code` | `$roblox-code` |
 | Detailed instructions | [Claude Code setup](#claude-code-setup) | [Codex setup](#openai-codex-setup) and [Codex adapter notes](codex/README.md) |
 
-The Codex installer **copies and adjusts** the skills and converts the seven role descriptions into TOML. This is not proof that every script, agent, or Studio interaction already works on the target machine. The Claude Code installer is **not** the Codex installer; do not run it to configure Codex.
+The Codex installer **copies and adjusts** the skills. Seven optional role definitions can be converted into TOML only after verifying subagent tool isolation. The default is sequential mode without custom subagents. This is not proof that every script, agent, or Studio interaction already works on the target machine. The Claude Code installer is **not** the Codex installer; do not run it to configure Codex.
 
 ## What is included
 
@@ -33,7 +33,7 @@ The Codex installer **copies and adjusts** the skills and converts the seven rol
 | `roblox-animation` | Headless Blender workflows for R6/R15 animations |
 | `roblox-skills-setup` | Detects/configures local dependencies and per-skill `LOCAL.md` files |
 
-Seven original role definitions live in [`agents/`](agents/): `roblox-asset-anim`, `roblox-asset-map`, `roblox-asset-mesh`, `roblox-asset-sfx`, `roblox-asset-ui`, `roblox-asset-vfx`, and `roblox-market-scout`. The Codex installer generates corresponding TOML files. Runtime agent discovery, delegation, and tool restrictions still need to be checked in the installed Codex environment.
+Seven original role definitions live in [`agents/`](agents/): `roblox-asset-anim`, `roblox-asset-map`, `roblox-asset-mesh`, `roblox-asset-sfx`, `roblox-asset-ui`, `roblox-asset-vfx`, and `roblox-market-scout`. The Codex installer generates corresponding TOML files **only when explicitly opted in after checking tool isolation**. Runtime agent discovery, delegation, and tool restrictions still need to be checked in the installed Codex environment.
 
 ### Workflow at a glance
 
@@ -75,7 +75,7 @@ Requirements for installing the adapter: **Python 3.11+**, an installed Codex en
    python codex/install.py --scope user --apply
    ```
 
-This installs adjusted skill copies under `~/.agents/skills/` and generated agent TOML under `~/.codex/agents/`. The source `skills/`, `agents/`, `install.ps1`, and `install.sh` remain unchanged.
+This installs adjusted skill copies under `~/.agents/skills/` but **does not install custom agents by default**. See [opt-in conditions](codex/README.md#subagents-and-orchestration). The source `skills/`, `agents/`, `install.ps1`, and `install.sh` remain unchanged.
 
 To install only in one existing project:
 
@@ -85,7 +85,7 @@ python codex/install.py --scope project --project-root "/path/to/your/project"
 python codex/install.py --scope project --project-root "/path/to/your/project" --apply
 ```
 
-Project scope writes into that project's `.agents/skills/` and `.codex/agents/`. The installer defaults to a **dry run**; `--apply` is required to change files. It refuses to replace existing installations unless you explicitly use `--force --apply`, which backs up old skill/agent paths under `.codex-backups/` and carries forward existing `LOCAL.md` files. Review local settings before replacing anything.
+Project scope writes skill copies into that project's `.agents/skills/`. Optional role TOML goes into `.codex/agents/` only after isolation is verified. The installer defaults to a **dry run**; `--apply` is required to change files. It refuses to replace existing installations unless you explicitly use `--force --apply`, which backs up old skill/agent paths under `.codex-backups/` and carries forward existing `LOCAL.md` files. Review local settings before replacing anything.
 
 After installation, open Codex in the relevant workspace, confirm that the skills are discoverable, and invoke a skill by name, for example:
 
@@ -130,7 +130,7 @@ For local configuration and optional stages, inspect [`roblox-skills-setup`](ski
 
 ## Codex subagents and Studio safety
 
-The adapter translates Claude's seven Markdown agent descriptions into Codex TOML instructions. It **does not translate or enforce** Claude-specific `tools`, `disallowedTools`, `model`, `maxTurns`, or `skills` front matter.
+The adapter can translate Claude's seven Markdown agent descriptions into Codex TOML instructions, but it **installs no custom agent roles by default**. Until Studio MCP access is isolated and verified, asset stages must run sequentially. It **does not translate or enforce** Claude-specific `tools`, `disallowedTools`, `model`, `maxTurns`, or `skills` front matter.
 
 - **Check runtime support.** Confirm Codex actually discovers the generated agent roles and has an available delegation mechanism. A TOML file on disk alone is not evidence a subagent ran.
 - **Restrict tools at the execution layer.** A worker prompt saying "never use Studio" is **not** an enforced MCP permission boundary. Codex subagents may inherit the parent session's available tools and permissions; configure/review actual tool access before delegating.
@@ -145,7 +145,7 @@ Project-specific plans and explicit approvals still govern implementation. A pla
 | Check | Current status for this fork |
 | --- | --- |
 | 11 source skills and 7 source agent definitions present | Present in repository |
-| Codex installation adapter and TOML conversion code | Implemented on disk; not runtime-validated |
+| Codex installation adapter and optional TOML conversion code | Implemented on disk; not runtime-validated |
 | Codex installation on an end user's computer | Not verified |
 | Automatic Codex skill discovery and custom subagent execution | Not verified |
 | Roblox Studio MCP connection / single-writer enforcement | Not verified |
