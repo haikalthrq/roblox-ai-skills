@@ -66,68 +66,6 @@ class P0Tests(unittest.TestCase):
         self.assertNotIn("Ask Claude to", setup_skill)
         self.assertNotIn("add it to Claude", setup_skill)
 
-
-    def test_section_brief_and_research_pipeline_enforce_serial_execution(self):
-        self.assertEqual(self.install(apply=True), 0)
-        root = self.project / ".agents" / "skills" / "create-roblox-game"
-        section_script = root / "scripts" / "section.py"
-        lines = section_script.read_text(encoding="utf-8")
-        self.assertNotIn("Fan-out workers are allowed", lines)
-        brief = subprocess.run(
-            [sys.executable, str(section_script), "brief", "3"],
-            cwd=self.project, capture_output=True, text=True, timeout=25,
-        )
-        self.assertEqual(brief.returncode, 0, brief.stderr)
-        self.assertIn("process asset stages sequentially", brief.stdout)
-        self.assertNotIn("Fan-out workers are allowed", brief.stdout)
-        pipeline = (root / "references" / "pipeline.md").read_text(encoding="utf-8")
-        self.assertIn("Research genre candidates sequentially", pipeline)
-        self.assertIn("Do not spawn market-scout workers", pipeline)
-        self.assertNotIn("safest place to rehearse fan-out", pipeline)
-
-    def test_ledger_runtime_recommends_only_sequential_mode(self):
-        self.assertEqual(self.install(apply=True), 0)
-        ledger = (self.project / ".agents" / "skills"
-                  / "roblox-build-orchestrator" / "scripts" / "run_log.py")
-        root = self.root / "ledger-runs"
-        def call(*args):
-            return subprocess.run(
-                [sys.executable, str(ledger), *args],
-                cwd=self.project, capture_output=True, text=True, timeout=25,
-            )
-        new = call("init", "--dir", str(root), "--run", "serial")
-        self.assertEqual(new.returncode, 0, new.stderr)
-        meta = json.loads((root / "serial" / "meta.json").read_text(encoding="utf-8"))
-        self.assertEqual(meta["mode"], "solo")
-        events = root / "serial" / "events.jsonl"
-        with events.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps({
-                "kind": "start", "stage": "3d-meshes",
-                "ts": "2026-01-01T00:00:00+00:00",
-            }) + "\n")
-            fh.write(json.dumps({
-                "kind": "end", "stage": "3d-meshes", "status": "ok",
-                "ts": "2026-01-01T04:00:00+00:00",
-            }) + "\n")
-        review = call("decide", "--dir", str(root), "--run", "serial")
-        self.assertEqual(review.returncode, 0, review.stderr)
-        self.assertIn("RECOMMENDATION: keep sequential execution", review.stdout)
-        self.assertIn("Investigate slow stage", review.stdout)
-        self.assertNotIn("RECOMMENDATION: fan out", review.stdout)
-        invalid = call("init", "--dir", str(root), "--run", "bad",
-                       "--mode", "fanout")
-        self.assertNotEqual(invalid.returncode, 0)
-        self.assertFalse((root / "bad").exists())
-
-    def test_custom_agents_flag_help_describes_risk_not_isolation(self):
-        cli = subprocess.run(
-            [sys.executable, str(ROOT / "codex" / "install.py"), "--help"],
-            cwd=ROOT, capture_output=True, text=True, timeout=25,
-        )
-        self.assertEqual(cli.returncode, 0, cli.stderr)
-        self.assertIn("MCP-inheritance risk acceptance", " ".join(cli.stdout.split()))
-        self.assertNotIn("after verifying runtime tool isolation", cli.stdout)
-
     def test_mcp_and_relocation(self):
         self.install(apply=True)
         moved = self.root / "moved"

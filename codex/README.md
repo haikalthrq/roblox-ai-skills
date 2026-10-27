@@ -36,6 +36,44 @@ Project-scoped examples use relative project-root paths; installed setup scripts
 The installer refuses to replace an installed skill or agent by default.
 Use `--force --apply` to create a uniquely named backup under `.codex-backups/` and preserve existing `LOCAL.md`. Backup paths are prechecked; recoverable errors trigger best-effort rollback. This is not crash-atomic. Keep secrets out of `LOCAL.md`.
 
+## P1 installer concurrency and recovery
+
+An applying installer creates a per-scope **`.codex-install.lock`** using atomic
+exclusive creation. A second installer for that scope refuses to run. Dry-run
+does not create a lock. The installer refuses symlinked destination paths,
+source entries, and `LOCAL.md` links.
+
+Before moving destinations, the installer stores a checksummed
+`.codex-backups/<timestamp>-<id>/transaction.json` with `state: pending`.
+Completed installs retain `state: complete` and prior backups. Ordinary
+failures attempt rollback and record `state: recovered` when successful.
+**Neither the journal nor rollback is a crash-atomic filesystem transaction.**
+
+After an interruption, a **stale lock may remain**. Do not immediately
+retry `--force`. Confirm no installer remains active, inspect the lock and
+pending transaction, and preserve a separate copy of backups. Remove the stale
+lock *manually* only after proving the process is stopped. Then explicitly
+request recovery using the same scope and project root:
+
+```bash
+python codex/install.py --scope project --project-root "/path/to/project" \
+  --recover "/path/to/project/.codex-backups/<transaction-folder>"
+```
+
+For user scope use `--scope user` and a transaction under `~/.codex-backups/`.
+`--recover` **mutates files** and requires explicit authorization; it is
+never automatic. The recovery verifies all destinations and checksums before
+undoing moves. Unknown edits to installed artifacts are left untouched and
+cause an explicit refusal. Files never backed up are not guessed at; inspect
+the recovered tree and use setup checks before retrying the installer.
+
+Locks are not auto-stolen by PID or age, because a PID may be reused and
+removing a live lock can cause data loss. The supported recovery handles
+tested process interruptions, not guaranteed power-loss durability,
+filesystem corruption, external concurrent writes, or fully atomic rollback.
+Keep independent backups of valuable files.
+
+
 ## How to invoke
 
 Open Codex in the workspace containing the installed skills and ask it to

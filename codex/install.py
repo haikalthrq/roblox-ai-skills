@@ -6,6 +6,8 @@ Python 3.11+; standard library only. Dry-run unless --apply is supplied.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import hashlib
 import os
 import uuid
 import json
@@ -353,6 +355,8 @@ def codex_run_log(text: str) -> str:
 
 
 def adapt_skill(source: Path, destination: Path, skill_dir: Path, agent_dir: Path) -> None:
+    if source.is_symlink() or any(p.is_symlink() for p in source.rglob("*")):
+        raise ValueError(f"Symlink in skill source tree refused: {source}")
     shutil.copytree(source, destination)
     for path in destination.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
@@ -507,6 +511,183 @@ def studio_config_status(project_root: Path) -> tuple[bool, str]:
     return False, "No enabled Studio server in inspected configs; runtime still unverified"
 
 
+
+def path_exists(path: Path) -> bool:
+    """Path.exists() alone misses dangling symlinks."""
+    return path.exists() or path.is_symlink()
+
+
+def fingerprint(path: Path) -> str:
+    """Hash one installed file/tree without following directory symlinks."""
+    digest = hashlib.sha256()
+    if path.is_symlink():
+        raise ValueError(f"Symlink is not an install artifact: {path}")
+    if path.is_file():
+        digest.update(b"F")
+        digest.update(path.read_bytes())
+    elif path.is_dir():
+        digest.update(b"D")
+        for entry in sorted(path.rglob("*"), key=lambda p: p.relative_to(path).as_posix()):
+            if entry.is_symlink():
+                raise ValueError(f"Symlink inside install artifact: {entry}")
+            rel = entry.relative_to(path).as_posix().encode("utf-8")
+            digest.update(rel)
+            if entry.is_file():
+                digest.update(b"F")
+                digest.update(entry.read_bytes())
+            elif entry.is_dir():
+                digest.update(b"D")
+            else:
+                raise ValueError(f"Unsupported entry in install artifact: {entry}")
+    else:
+        raise ValueError(f"Not a regular file or directory: {path}")
+    return digest.hexdigest()
+
+
+def assert_safe_targets(skill_dir: Path, agent_dir: Path, backup_root: Path,
+                        paths: list[Path]) -> None:
+    """Reject redirects, special files, and symlinked destination parents."""
+    for folder in (skill_dir.parent, skill_dir, agent_dir.parent, agent_dir, backup_root):
+        if folder.is_symlink():
+            raise ValueError(f"Symlinked install directory refused: {folder}")
+        if folder.exists() and not folder.is_dir():
+            raise ValueError(f"Install directory is not a directory: {folder}")
+    for dest in paths:
+        if dest.is_symlink():
+            raise ValueError(f"Symlinked install destination refused: {dest}")
+        if dest.exists():
+            should_directory = dest.parent == skill_dir
+            if should_directory != dest.is_dir():
+                raise ValueError(f"Unexpected destination type: {dest}")
+
+
+@contextmanager
+def installation_lock(root: Path):
+    """Cross-process O_EXCL lock. A stale lock must be handled manually."""
+    if root.is_symlink():
+        raise ValueError(f"Symlinked install scope refused: {root}")
+    root.mkdir(parents=True, exist_ok=True)
+    lock = root / ".codex-install.lock"
+    token = uuid.uuid4().hex
+    try:
+        fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise RuntimeError(
+            f"Installer lock exists: {lock}. Another install may be active. "
+            "After confirming it has stopped, inspect pending transactions before "
+            "removing the stale lock manually."
+        ) from exc
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump({"pid": os.getpid(), "token": token,
+                       "started": datetime.now(timezone.utc).isoformat()}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        yield
+    finally:
+        try:
+            data = json.loads(lock.read_text(encoding="utf-8"))
+            if data.get("token") == token:
+                lock.unlink()
+        except (OSError, ValueError, TypeError):
+            # Do not unlink a lock replaced by another process.
+            pass
+
+
+def write_transaction(path: Path, data: dict) -> None:
+    """Replace JSON metadata atomically; the metadata is not a filesystem transaction."""
+    temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+    fd = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        json.dump(data, stream, indent=2)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, path)
+
+
+
+def transaction_entry(scope_root: Path, dest: Path, item: Path, existed: bool) -> dict:
+    return {"destination": dest.relative_to(scope_root).as_posix(),
+            "existed": existed, "sha256": fingerprint(item)}
+
+
+def recover_transaction(args: argparse.Namespace) -> int:
+    """Explicit undo for a pending install; refuse user-edited destinations."""
+    skill_dir, agent_dir, backup_root = targets(args.scope, args.project_root)
+    root = skill_dir.parent.parent
+    transaction = args.recover.expanduser().absolute()
+    if transaction.is_symlink() or transaction.parent != backup_root.absolute():
+        raise ValueError(f"Recovery requires a direct transaction under {backup_root}")
+    with installation_lock(root):
+        assert_safe_targets(skill_dir, agent_dir, backup_root, [])
+        journal_file = transaction / "transaction.json"
+        if journal_file.is_symlink():
+            raise ValueError("Symlinked transaction journal refused")
+        journal = json.loads(journal_file.read_text(encoding="utf-8"))
+        if journal.get("version") != 1 or journal.get("scope_root") != str(root.absolute()):
+            raise ValueError("Transaction version or installation root mismatch")
+        if journal.get("state") != "pending":
+            raise ValueError(f"Transaction not recoverable (state={journal.get('state')})")
+        records = journal.get("entries")
+        if not isinstance(records, list) or not records:
+            raise ValueError("Missing transaction entries")
+        entries = []
+        for record in records:
+            relative = Path(record["destination"])
+            parts = relative.parts
+            if len(parts) != 3 or parts[:2] not in (
+                (".agents", "skills"), (".codex", "agents")
+            ) or parts[2] in ("", ".", ".."):
+                raise ValueError(f"Invalid transaction destination: {relative}")
+            if (not isinstance(record.get("existed"), bool) or
+                    not re.fullmatch(r"[0-9a-f]{64}", str(record.get("sha256", "")))):
+                raise ValueError(f"Invalid transaction record for {relative}")
+            group = "skills" if parts[0] == ".agents" else "agents"
+            if group == "agents" and not parts[2].endswith(".toml"):
+                raise ValueError("Unrecognized agent destination")
+            dest = root / relative
+            backup = transaction / group / parts[2]
+            if dest.is_symlink() or backup.is_symlink():
+                raise ValueError(f"Symlinked transaction destination refused: {dest}")
+            entries.append((dest, backup, record))
+
+        assert_safe_targets(skill_dir, agent_dir, backup_root, [r[0] for r in entries])
+        # Preflight all entries before undoing the first item. Unrecognized user
+        # edits MUST remain untouched; operator must resolve those manually.
+        for dest, backup, record in entries:
+            if path_exists(dest):
+                matches_staged = fingerprint(dest) == record["sha256"]
+                if backup.exists() or not record["existed"]:
+                    if not matches_staged:
+                        raise ValueError(f"Recovery refused: destination was edited: {dest}")
+                # No backup means the original destination was never moved
+                # (or was already restored). Leave it unchanged; do not guess.
+            elif record["existed"] and not backup.exists():
+                raise ValueError(f"Recovery refused: original and backup both missing: {dest}")
+
+        for dest, backup, record in reversed(entries):
+            if backup.exists():
+                if path_exists(dest):
+                    if dest.is_dir():
+                        shutil.rmtree(dest)
+                    else:
+                        dest.unlink()
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(backup), str(dest))
+                print(f"Restored original: {dest}")
+            elif not record["existed"] and path_exists(dest):
+                if dest.is_dir():
+                    shutil.rmtree(dest)
+                else:
+                    dest.unlink()
+                print(f"Removed new artifact: {dest}")
+
+        journal["state"] = "recovered"
+        write_transaction(journal_file, journal)
+        print("Recovered pending transaction. Inspect the filesystem before retrying.")
+        return 0
+
+
 def install(args: argparse.Namespace) -> int:
     if sys.version_info < (3, 11):
         raise RuntimeError("Python 3.11 or newer is required")
@@ -545,7 +726,7 @@ def install(args: argparse.Namespace) -> int:
             )
 
     paths = [skill_dir / p.name for p in skills] + [agent_dir / (p.stem + ".toml") for p in agents]
-    conflicts = [p for p in paths if p.exists()]
+    conflicts = [p for p in paths if path_exists(p)]
     print(f"Scope: {args.scope}; skills: {len(skills)}; roles: {len(agents)} / {len(available_agents)}")
     if not agents:
         print("Sequential workflow policy: no new custom agents installed. "
@@ -561,72 +742,109 @@ def install(args: argparse.Namespace) -> int:
         if conflicts:
             print("Existing paths require --force; backups and LOCAL.md preservation enabled.")
         return 0
-    if conflicts and not args.force:
-        print("Refusing to overwrite. Use --force to back up existing installs.", file=sys.stderr)
-        return 2
+    # The dry run intentionally avoids creating even a lock file.
+    with installation_lock(skill_dir.parent.parent):
+        assert_safe_targets(skill_dir, agent_dir, backup_root, paths)
+        # Recheck under lock: the conflict/agent state may have changed since preview.
+        if not args.enable_custom_agents and observed_agent_files(agent_dir, args.scope, args.project_root):
+            raise ValueError("Existing custom agent TOML discovered after lock acquisition")
+        if args.enable_custom_agents:
+            configured, reason = studio_config_status(args.project_root)
+            if configured:
+                raise ValueError(f"Studio MCP detected after lock acquisition: {reason}")
+        conflicts = [p for p in paths if path_exists(p)]
+        if conflicts and not args.force:
+            print("Refusing to overwrite. Use --force to back up existing installs.", file=sys.stderr)
+            return 2
 
-    # Assemble and validate every source conversion before touching destinations.
-    with tempfile.TemporaryDirectory(prefix="roblox-codex-") as temp:
-        staged = Path(temp)
-        (staged / "agents").mkdir(parents=True, exist_ok=True)
-        for source in skills:
-            adapt_skill(source, staged / "skills" / source.name, skill_dir, agent_dir)
-        for source in agents:
-            target = staged / "agents" / (source.stem + ".toml")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(agent_toml(source, skill_dir, agent_dir), encoding="utf-8")
+        # Assemble and validate every source conversion before touching destinations.
+        with tempfile.TemporaryDirectory(prefix="roblox-codex-") as temp:
+            staged = Path(temp)
+            (staged / "agents").mkdir(parents=True, exist_ok=True)
+            for source in skills:
+                adapt_skill(source, staged / "skills" / source.name, skill_dir, agent_dir)
+            for source in agents:
+                target = staged / "agents" / (source.stem + ".toml")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(agent_toml(source, skill_dir, agent_dir), encoding="utf-8")
 
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        backup_base = backup_root / (stamp + "-" + uuid.uuid4().hex[:12])
-        installs: list[tuple[Path, Path, Path | None]] = []
-        for label, root, staged_root in (
-            ("skills", skill_dir, staged / "skills"),
-            ("agents", agent_dir, staged / "agents"),
-        ):
-            for item in sorted(staged_root.iterdir()):
-                dest = root / item.name
-                backup = backup_base / label / item.name if dest.exists() else None
-                if backup is not None:
-                    if backup.exists():
-                        raise FileExistsError(f"Backup conflict before installation: {backup}")
-                    original_local = dest / "LOCAL.md"
-                    if label == "skills" and original_local.is_file():
-                        (item / "LOCAL.md").write_bytes(original_local.read_bytes())
-                installs.append((item, dest, backup))
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            backup_base = backup_root / (stamp + "-" + uuid.uuid4().hex[:12])
+            installs: list[tuple[Path, Path, Path | None]] = []
+            for label, root, staged_root in (
+                ("skills", skill_dir, staged / "skills"),
+                ("agents", agent_dir, staged / "agents"),
+            ):
+                for item in sorted(staged_root.iterdir()):
+                    dest = root / item.name
+                    backup = backup_base / label / item.name if dest.exists() else None
+                    if backup is not None:
+                        if backup.exists():
+                            raise FileExistsError(f"Backup conflict before installation: {backup}")
+                        original_local = dest / "LOCAL.md"
+                        if label == "skills" and original_local.is_symlink():
+                            raise ValueError(f"Symlinked LOCAL.md refused: {original_local}")
+                        if label == "skills" and original_local.is_file():
+                            (item / "LOCAL.md").write_bytes(original_local.read_bytes())
+                    installs.append((item, dest, backup))
 
-        attempted: list[Path] = []
-        saved: list[tuple[Path, Path]] = []
-        try:
-            for item, dest, backup in installs:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                if backup is not None:
-                    backup.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(dest), str(backup))
-                    saved.append((dest, backup))
-                attempted.append(dest)
-                shutil.move(str(item), str(dest))
-                print(f"Installed: {dest}")
-        except Exception as failure:
-            errors = []
-            for dest in reversed(attempted):
-                try:
-                    if dest.is_dir() and not dest.is_symlink():
-                        shutil.rmtree(dest)
-                    elif dest.exists() or dest.is_symlink():
-                        dest.unlink()
-                except OSError as exc:
-                    errors.append(f"could not clear {dest}: {exc}")
-            for dest, backup in reversed(saved):
-                try:
-                    shutil.move(str(backup), str(dest))
-                except OSError as exc:
-                    errors.append(f"could not restore {dest}: {exc}")
-            detail = "; ".join(errors) if errors else "all overwritten destinations restored"
-            raise RuntimeError(f"Installation failed; rollback attempted ({detail})") from failure
+            # Write a checksummed, pending undo plan BEFORE the first move.
+            scope_root = skill_dir.parent.parent
+            journal = {
+                "version": 1,
+                "state": "pending",
+                "scope_root": str(scope_root.absolute()),
+                "entries": [
+                    transaction_entry(scope_root, dest, item, backup is not None)
+                    for item, dest, backup in installs
+                ],
+            }
+            backup_base.mkdir(parents=True, exist_ok=False)
+            journal_file = backup_base / "transaction.json"
+            write_transaction(journal_file, journal)
 
-    print("Codex skills installed; custom agents generated only when explicitly opted in.")
-    print("No dependencies were installed or Studio connection opened by this installer.")
-    return 0
+            attempted: list[Path] = []
+            saved: list[tuple[Path, Path]] = []
+            try:
+                for item, dest, backup in installs:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    if backup is not None:
+                        backup.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.move(str(dest), str(backup))
+                        saved.append((dest, backup))
+                    attempted.append(dest)
+                    shutil.move(str(item), str(dest))
+                    print(f"Installed: {dest}")
+            except Exception as failure:
+                errors = []
+                for dest in reversed(attempted):
+                    try:
+                        if dest.is_dir() and not dest.is_symlink():
+                            shutil.rmtree(dest)
+                        elif dest.exists() or dest.is_symlink():
+                            dest.unlink()
+                    except OSError as exc:
+                        errors.append(f"could not clear {dest}: {exc}")
+                for dest, backup in reversed(saved):
+                    try:
+                        shutil.move(str(backup), str(dest))
+                    except OSError as exc:
+                        errors.append(f"could not restore {dest}: {exc}")
+                detail = "; ".join(errors) if errors else "all overwritten destinations restored"
+                if not errors:
+                    journal["state"] = "recovered"
+                    write_transaction(journal_file, journal)
+                raise RuntimeError(
+                    f"Installation failed; rollback attempted ({detail}). "
+                    f"Transaction: {backup_base}"
+                ) from failure
+
+            journal["state"] = "complete"
+            write_transaction(journal_file, journal)
+
+        print("Codex skills installed; custom agents generated only when explicitly opted in.")
+        print("No dependencies were installed or Studio connection opened by this installer.")
+        return 0
 
 
 
@@ -640,8 +858,13 @@ def main() -> int:
                         help="Optional roles require explicit MCP-inheritance risk acceptance in a Studio-free session")
     parser.add_argument("--accept-subagent-mcp-inheritance", action="store_true",
                         help="Acknowledge potential MCP tool inheritance; only for Studio-free sessions")
+    parser.add_argument("--recover", type=Path, metavar="TRANSACTION_DIR",
+                        help="Undo a pending interrupted transaction after confirming installer is stopped")
+    args = parser.parse_args()
+    if args.recover and (args.apply or args.force or args.enable_custom_agents):
+        parser.error("--recover cannot be combined with --apply, --force or --enable-custom-agents")
     try:
-        return install(parser.parse_args())
+        return recover_transaction(args) if args.recover else install(args)
     except (ValueError, FileExistsError, RuntimeError, OSError) as exc:
         print(f"Install blocked/failed: {exc}", file=sys.stderr)
         return 2
