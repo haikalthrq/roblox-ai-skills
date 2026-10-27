@@ -125,7 +125,7 @@ class P0Tests(unittest.TestCase):
             cwd=ROOT, capture_output=True, text=True, timeout=25,
         )
         self.assertEqual(cli.returncode, 0, cli.stderr)
-        self.assertIn("MCP-inheritance risk acceptance", cli.stdout)
+        self.assertIn("MCP-inheritance risk acceptance", " ".join(cli.stdout.split()))
         self.assertNotIn("after verifying runtime tool isolation", cli.stdout)
 
     def test_mcp_and_relocation(self):
