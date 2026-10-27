@@ -72,7 +72,7 @@ def replace_claude_paths(text: str, skill_dir: Path, agent_dir: Path) -> str:
     personal = skill_dir == Path.home() / ".agents" / "skills"
     skills = "~/.agents/skills" if personal else "./.agents/skills"
     agents = "~/.codex/agents" if personal else "./.codex/agents"
-    text = re.sub(r"Claude[ \\t]*\\r?\\n[ \\t]*Code", "Codex", text)
+    text = re.sub(r"Claude[ \t]*\r?\n[ \t]*Code", "Codex", text)
     for before, after in (
         ("~/.claude/skills", skills),
         ("$HOME/.claude/skills", skills),
