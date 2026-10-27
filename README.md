@@ -6,6 +6,12 @@ takes one game idea through research, design, build and playtest.
 
 Free, as promised at 1,000 subscribers. Thank you for watching.
 
+
+> **OpenAI Codex users:** This fork includes a Codex adapter for the 11 skills
+> and seven specialist agents. Start with [codex/README.md](codex/README.md).
+> It installs separate Codex copies; the original Claude Code workflow below
+> remains available. Nothing is installed by checking out this branch.
+
 ## What is in the pack
 
 | Skill | What it does |
