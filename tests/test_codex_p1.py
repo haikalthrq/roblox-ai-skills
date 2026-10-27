@@ -132,8 +132,8 @@ class P1ReliabilityTests(unittest.TestCase):
 
         def moved_then_failed(source, destination, *args, **kwargs):
             if (not injected["hit"] and
-                    str(source) == str(target) and
-                    ".codex-backups" in str(destination)):
+                    Path(source).resolve() == target.resolve() and
+                    ".codex-backups" in Path(destination).parts):
                 injected["hit"] = True
                 native_move(source, destination, *args, **kwargs)
                 raise PermissionError("simulated error after successful rename")
