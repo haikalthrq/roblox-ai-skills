@@ -158,6 +158,66 @@ class P1ReliabilityTests(unittest.TestCase):
         self.assertEqual(self.journal_dirs("pending"), [txn])
         self.assertTrue(backup.is_file())
 
+    def test_recovery_refuses_missing_original_backup_after_interruption(self):
+        self.assertEqual(self.install(), 0)
+        target = self.project / ".agents" / "skills" / "create-roblox-game"
+        (target / "legacy-only.txt").write_text(
+            "old artifact that is intentionally absent from the staged copy",
+            encoding="utf-8",
+        )
+        txn = self.interrupted_install(force=True)
+        backup = txn / "skills" / "create-roblox-game"
+        self.assertTrue(backup.is_dir())
+        self.assertTrue(target.is_dir())
+        self.assertFalse((target / "legacy-only.txt").exists())
+        shutil.rmtree(backup)
+        staged_before = adapter.fingerprint(target)
+        with self.assertRaisesRegex(ValueError, "original backup missing"):
+            adapter.recover_transaction(self.args(recover=txn))
+        self.assertEqual(adapter.fingerprint(target), staged_before)
+        self.assertEqual(self.journal_dirs("pending"), [txn])
+        # Recovery preflights every path; it must not have undone any other
+        # still-intact backup when one entry is unrecoverable.
+        self.assertTrue((txn / "skills" / "roblox-3d-model").exists())
+
+    def test_recovery_invalid_journal_shapes_fail_cleanly_via_cli(self):
+        self.assertEqual(self.install(), 0)
+        txn = self.journal_dirs("complete")[0]
+        journal = txn / "transaction.json"
+        original = json.loads(journal.read_text(encoding="utf-8"))
+        original["state"] = "pending"
+        expected = adapter.fingerprint(
+            self.project / ".agents" / "skills" / "create-roblox-game"
+        )
+
+        broken_entry = dict(original)
+        broken_entry["entries"] = [123]
+        non_string_destination = json.loads(json.dumps(original))
+        non_string_destination["entries"][0]["destination"] = 123
+        cases = [
+            ("non-object document", [], "expected a JSON object"),
+            ("non-object entry", broken_entry, "expected a JSON object"),
+            ("non-string destination", non_string_destination, "expected a string"),
+        ]
+        for label, malformed, error_message in cases:
+            with self.subTest(label=label):
+                journal.write_text(json.dumps(malformed), encoding="utf-8")
+                cli = subprocess.run(
+                    [sys.executable, str(ROOT / "codex" / "install.py"),
+                     "--scope", "project", "--project-root", str(self.project),
+                     "--recover", str(txn)],
+                    cwd=self.root, capture_output=True, text=True, timeout=20,
+                )
+                self.assertEqual(cli.returncode, 2, cli.stderr)
+                self.assertIn(error_message, cli.stderr)
+                self.assertNotIn("Traceback", cli.stderr)
+                self.assertEqual(
+                    adapter.fingerprint(
+                        self.project / ".agents" / "skills" / "create-roblox-game"
+                    ), expected
+                )
+                self.assertFalse((self.project / ".codex-install.lock").exists())
+
     def test_recovery_refuses_to_remove_post_crash_user_edits(self):
         txn = self.interrupted_install()
         updated = self.project / ".agents" / "skills" / "create-roblox-game" / "SKILL.md"
