@@ -76,7 +76,7 @@ class CodexInstallerTests(unittest.TestCase):
                 base / "project" / ".codex" / "agents",
             )
             ast.parse(output)
-            self.assertIn("roblox-*.toml", output)
+            self.assertIn('AGENTS_DIR.glob("*.toml")', output)
             self.assertIn("codex mcp list", output)
             self.assertNotIn('HOME / ".claude" / "skills"', output)
             self.assertIn("SKILLS_DIR.parents[1]", output)
@@ -134,7 +134,7 @@ class CodexInstallerTests(unittest.TestCase):
                 self.assertTrue((base / "target" / ".agents" / "skills" / "example" / "SKILL.md").exists())
                 self.assertFalse((base / "target" / ".codex" / "agents" / "roblox-asset-map.toml").exists())
                 opts.enable_custom_agents = True
-                with self.assertRaisesRegex(RuntimeError, "Custom agents inherit parent MCP"):
+                with self.assertRaisesRegex(ValueError, "Custom agents inherit parent MCP"):
                     adapter.install(opts)
             finally:
                 adapter.SKILL_SOURCE, adapter.AGENT_SOURCE = old_skills, old_agents
