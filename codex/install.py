@@ -184,6 +184,15 @@ def adapt_python_runtime(source: Path, path: Path, text: str,
             'SKILLS = Path.home() / ".claude" / "skills"',
             'SKILLS = Path.home() / ".agents" / "skills"',
             "global preflight fallback")
+    if source.name == "create-roblox-game" and path.name == "section.py":
+        return replace_once(
+            text,
+            "Fan-out workers are allowed; every one is fanned in and its manifest checked before close.",
+            "Studio-connected Codex sessions must process asset stages sequentially; check each manifest before closing the section.",
+            "section.py brief and HANDOFF sequential policy",
+        )
+    if source.name == "roblox-build-orchestrator" and path.name == "run_log.py":
+        return codex_run_log(text)
     return text
 
 
@@ -263,6 +272,86 @@ def codex_create_game(text: str) -> str:
     return text
 
 
+
+def codex_run_log(text: str) -> str:
+    """Keep legacy Claude ledger untouched; Codex must not recommend fan-out."""
+    start = "def cmd_decide(args) -> None:\n"
+    end = "\n# ---------------------------------------------------------------- cli\n"
+    if text.count(start) != 1 or text.count(end) != 1:
+        raise ValueError("Unexpected run_log.py decision function boundaries")
+    before, remaining = text.split(start, 1)
+    _, after = remaining.split(end, 1)
+    replacement = '''def cmd_decide(args) -> None:
+    """Review stage budgets, never recommend Studio-connected subagent fan-out."""
+    d = run_dir(Path(args.dir), args.run)
+    meta, events = load(d)
+    spans = stage_spans(events)
+    stages = [stage for stage in meta["plan"] if stage["parallelisable"]]
+    measured = [
+        (stage["stage"], elapsed_min(spans[stage["stage"]]), stage["budget_min"])
+        for stage in stages
+        if stage["stage"] in spans and spans[stage["stage"]]["end"]
+    ]
+
+    print()
+    print(f"SEQUENTIAL STAGE REVIEW for run '{meta['run']}' (mode was {meta['mode']})")
+    print("=" * 74)
+    print("RECOMMENDATION: keep sequential execution in Studio-connected Codex sessions.")
+    print("No custom or built-in subagent is authorised by this ledger.")
+    if not measured:
+        print("No completed asset stages yet; continue collecting stage measurements.")
+        return
+
+    used = sum(item[1] for item in measured)
+    budget = sum(item[2] for item in measured)
+    over = [item for item in measured if item[1] > item[2]]
+    stalls = [event for event in events if event["kind"] == "stall"]
+    print(f"Asset stages measured: {len(measured)} of {len(stages)}")
+    print(f"Time used: {fmt_min(used)} against {fmt_min(budget)} budget")
+    print(f"Over-budget stages: {len(over)}; logged stalls: {len(stalls)}")
+    if over:
+        worst = max(over, key=lambda item: item[1] - item[2])
+        print(f"Investigate slow stage '{worst[0]}' before adding complexity.")
+    print("Delegation requires separately approved Studio-free execution and MCP review.")
+    print()
+
+'''
+    text = before + replacement + end + after
+    text = replace_once(
+        text,
+        "  run_log.py init  --run dry-run-1 [--mode solo|fanout] [--plan default]",
+        "  run_log.py init  --run dry-run-1 [--mode solo] [--plan default]",
+        "Codex ledger usage mode",
+    )
+    text = replace_once(
+        text,
+        's.add_argument("--mode", choices=["solo", "fanout"], default="fanout")',
+        's.add_argument("--mode", choices=["solo"], default="solo")',
+        "Codex ledger CLI sequential mode",
+    )
+    text = replace_once(
+        text,
+        '("decide", cmd_decide, "solo vs fan-out recommendation from measured data")',
+        '("decide", cmd_decide, "sequential stage-budget review (no fan-out recommendation)")',
+        "Codex ledger CLI review help",
+    )
+    text = replace_once(
+        text,
+        "  3. The fan-out decision. Whether the asset block needs subagents is a question\n"
+        "     about measured stage durations, and this is where those get measured.",
+        "  3. The sequential stage review measures completed asset-stage timings\n"
+        "     and recommends improvements without delegating Studio-enabled work.",
+        "Codex ledger module documentation",
+    )
+    text = replace_once(
+        text,
+        "  run_log.py decide             # solo vs fan-out recommendation from measured data",
+        "  run_log.py decide             # sequential stage-budget review",
+        "Codex ledger usage instructions",
+    )
+    return text
+
+
 def adapt_skill(source: Path, destination: Path, skill_dir: Path, agent_dir: Path) -> None:
     shutil.copytree(source, destination)
     for path in destination.rglob("*"):
@@ -290,6 +379,17 @@ def adapt_skill(source: Path, destination: Path, skill_dir: Path, agent_dir: Pat
                 "## roblox-market-scout (one per genre, spawned in parallel)",
                 "## roblox-market-scout (sequential in Studio-connected Codex sessions)",
                 "stage-briefs Studio-connected scout mode",
+            )
+        if source.name == "create-roblox-game" and path.name == "pipeline.md":
+            after = replace_once(
+                after,
+                "Use a research skill if you have one (or plain WebSearch/WebFetch), or fan out\n"
+                "`roblox-market-scout` across independent genre candidates (this is the safest place to rehearse fan-out - nothing it does\n"
+                "touches Studio).",
+                "Research genre candidates sequentially using the available research skill or web tools.\n"
+                "Do not spawn market-scout workers in a Studio-connected Codex session: built-in\n"
+                "and custom subagents can inherit the parent's Studio MCP access.",
+                "pipeline research delegation policy",
             )
         # Claude's installer copied Markdown roles. Codex needs generated TOML.
         if source.name == "roblox-build-orchestrator" and path.name == "SKILL.md":
@@ -537,7 +637,7 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true", help="Write files (default is dry-run)")
     parser.add_argument("--force", action="store_true", help="Back up and replace existing installed files")
     parser.add_argument("--enable-custom-agents", action="store_true",
-                        help="Explicit opt-in to custom roles after verifying runtime tool isolation")
+                        help="Optional roles require explicit MCP-inheritance risk acceptance in a Studio-free session")
     parser.add_argument("--accept-subagent-mcp-inheritance", action="store_true",
                         help="Acknowledge potential MCP tool inheritance; only for Studio-free sessions")
     try:
