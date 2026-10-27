@@ -33,9 +33,10 @@ The original `skills/` and `agents/` folders remain Claude Code sources.
 - Use the main Codex session as the **only Roblox Studio MCP writer**. Run one
   Studio MCP connection and one Rojo connection. Asset workers may write only
   their individually assigned files/manifests; no worker may interact with Studio.
-- Inspect Codex's *actual* subagent/tool capabilities before delegation.
-  If custom roles or fan-out are unavailable, run independent asset stages
-  sequentially in the main session. Never claim unsupported parallel work ran.
+- In a Studio-connected Codex session, do NOT spawn any subagents (including
+  built-in worker/explorer roles). Process asset stages sequentially, even when
+  fan-out tools exist. A Studio-free runtime must be separately approved and
+  validated before any delegation. Tool permissions are not enforced by prompts.
 - Do not treat Claude-only `tools`, `disallowedTools`, `model`, `maxTurns`,
   or `skills` front matter as enforced Codex permission controls.
   The parent Codex session must restrict tools and approve mutations.
@@ -71,6 +72,7 @@ def replace_claude_paths(text: str, skill_dir: Path, agent_dir: Path) -> str:
     personal = skill_dir == Path.home() / ".agents" / "skills"
     skills = "~/.agents/skills" if personal else "./.agents/skills"
     agents = "~/.codex/agents" if personal else "./.codex/agents"
+    text = re.sub(r"Claude[ \\t]*\\r?\\n[ \\t]*Code", "Codex", text)
     for before, after in (
         ("~/.claude/skills", skills),
         ("$HOME/.claude/skills", skills),
@@ -209,6 +211,34 @@ def codex_orchestrator(text: str) -> str:
     return text
 
 
+
+def codex_create_game(text: str) -> str:
+    """Remove incompatible automatic worker defaults from the installed game skill."""
+    start, end = "## Running it\n", "### STAGE 9b: THE INTEGRATION PASS\n"
+    if text.count(start) != 1 or text.count(end) != 1:
+        raise ValueError("Unexpected create-roblox-game orchestration headings")
+    before, rest = text.split(start, 1)
+    _, after = rest.split(end, 1)
+    text = before + (
+        "## Running it (Codex sequential mode)\n\n"
+        "Do not fan out any stage when the primary Codex session has Studio MCP. "
+        "Optional Codex role TOML is not a tool deny-list; built-in workers may "
+        "also inherit parent permissions. Run every asset stage serially, "
+        "inspect each manifest, and reserve all Studio writes for one main "
+        "session. This overrides any legacy references to fan-out below.\n\n"
+        "For an explicitly approved run, initialise the orchestration ledger "
+        "with run_log.py init --run NAME --mode solo. Use the established "
+        "stage gates and approval boundaries. Do not begin implementation "
+        "merely because a planning document was approved.\n\n"
+    ) + end + after
+    text = text.replace("--mode fanout", "--mode solo")
+    text = text.replace(
+        "**Fan-out is allowed inside sections 3 and 4**",
+        "**Do not fan out sections 3 and 4 in Codex Studio sessions**",
+    )
+    return text
+
+
 def adapt_skill(source: Path, destination: Path, skill_dir: Path, agent_dir: Path) -> None:
     shutil.copytree(source, destination)
     for path in destination.rglob("*"):
@@ -228,6 +258,8 @@ def adapt_skill(source: Path, destination: Path, skill_dir: Path, agent_dir: Pat
             after = after[:match.end()] + CODEX_SKILL_RULES + after[match.end():]
         if source.name == "roblox-build-orchestrator" and path.name == "SKILL.md":
             after = codex_orchestrator(after)
+        if source.name == "create-roblox-game" and path.name == "SKILL.md":
+            after = codex_create_game(after)
         # Claude's installer copied Markdown roles. Codex needs generated TOML.
         if source.name == "roblox-build-orchestrator" and path.name == "SKILL.md":
             after = re.sub(
