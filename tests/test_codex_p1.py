@@ -122,6 +122,31 @@ class P1ReliabilityTests(unittest.TestCase):
         self.assertTrue((skill_root / "roblox-3d-model" / "SKILL.md").is_file())
         self.assertEqual(self.journal_dirs("recovered"), [txn])
 
+    def test_rollback_restores_backup_even_if_move_raises_after_completion(self):
+        self.assertEqual(self.install(), 0)
+        target = self.project / ".agents" / "skills" / "create-roblox-game"
+        original = (target / "SKILL.md").read_bytes()
+        (target / "LOCAL.md").write_text("preserve me", encoding="utf-8")
+        native_move = shutil.move
+        injected = {"hit": False}
+
+        def moved_then_failed(source, destination, *args, **kwargs):
+            if (not injected["hit"] and
+                    str(source) == str(target) and
+                    ".codex-backups" in str(destination)):
+                injected["hit"] = True
+                native_move(source, destination, *args, **kwargs)
+                raise PermissionError("simulated error after successful rename")
+            return native_move(source, destination, *args, **kwargs)
+
+        with mock.patch.object(adapter.shutil, "move", side_effect=moved_then_failed):
+            with self.assertRaisesRegex(RuntimeError, "rollback attempted"):
+                self.install(force=True)
+        self.assertTrue(injected["hit"])
+        self.assertEqual((target / "SKILL.md").read_bytes(), original)
+        self.assertEqual((target / "LOCAL.md").read_text(encoding="utf-8"), "preserve me")
+        self.assertEqual(len(self.journal_dirs("recovered")), 1)
+
     def test_recovery_refuses_to_remove_post_crash_user_edits(self):
         txn = self.interrupted_install()
         updated = self.project / ".agents" / "skills" / "create-roblox-game" / "SKILL.md"
