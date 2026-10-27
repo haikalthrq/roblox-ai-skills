@@ -629,6 +629,8 @@ def recover_transaction(args: argparse.Namespace) -> int:
         if journal_file.is_symlink():
             raise ValueError("Symlinked transaction journal refused")
         journal = json.loads(journal_file.read_text(encoding="utf-8"))
+        if not isinstance(journal, dict):
+            raise ValueError("Invalid transaction journal: expected a JSON object")
         if journal.get("version") != 2 or journal.get("scope_root") != str(root.absolute()):
             raise ValueError("Transaction version or installation root mismatch")
         if journal.get("state") != "pending":
@@ -638,7 +640,12 @@ def recover_transaction(args: argparse.Namespace) -> int:
             raise ValueError("Missing transaction entries")
         entries = []
         for record in records:
-            relative = Path(record["destination"])
+            if not isinstance(record, dict):
+                raise ValueError("Invalid transaction entry: expected a JSON object")
+            name = record.get("destination")
+            if not isinstance(name, str):
+                raise ValueError("Invalid transaction destination: expected a string")
+            relative = Path(name)
             parts = relative.parts
             if len(parts) != 3 or parts[:2] not in (
                 (".agents", "skills"), (".codex", "agents")
@@ -676,8 +683,16 @@ def recover_transaction(args: argparse.Namespace) -> int:
                 if backup.exists() or not record["existed"]:
                     if not matches_staged:
                         raise ValueError(f"Recovery refused: destination was edited: {dest}")
-                # No backup means the original destination was never moved
-                # (or was already restored). Leave it unchanged; do not guess.
+                else:
+                    # An original with no backup can only be left in place if
+                    # its bytes still match the pre-install fingerprint.
+                    # Otherwise the backup may have been lost AFTER the move;
+                    # returning success here would silently strand new content.
+                    if fingerprint(dest) != record["original_sha256"]:
+                        raise ValueError(
+                            f"Recovery refused: original backup missing and "
+                            f"destination is not the original: {dest}"
+                        )
             elif record["existed"] and not backup.exists():
                 raise ValueError(f"Recovery refused: original and backup both missing: {dest}")
 
