@@ -608,7 +608,9 @@ def write_transaction(path: Path, data: dict) -> None:
 
 def transaction_entry(scope_root: Path, dest: Path, item: Path, existed: bool) -> dict:
     return {"destination": dest.relative_to(scope_root).as_posix(),
-            "existed": existed, "sha256": fingerprint(item)}
+            "existed": existed,
+            "sha256": fingerprint(item),
+            "original_sha256": fingerprint(dest) if existed else None}
 
 
 def recover_transaction(args: argparse.Namespace) -> int:
@@ -627,7 +629,7 @@ def recover_transaction(args: argparse.Namespace) -> int:
         if journal_file.is_symlink():
             raise ValueError("Symlinked transaction journal refused")
         journal = json.loads(journal_file.read_text(encoding="utf-8"))
-        if journal.get("version") != 1 or journal.get("scope_root") != str(root.absolute()):
+        if journal.get("version") != 2 or journal.get("scope_root") != str(root.absolute()):
             raise ValueError("Transaction version or installation root mismatch")
         if journal.get("state") != "pending":
             raise ValueError(f"Transaction not recoverable (state={journal.get('state')})")
@@ -645,6 +647,12 @@ def recover_transaction(args: argparse.Namespace) -> int:
             if (not isinstance(record.get("existed"), bool) or
                     not re.fullmatch(r"[0-9a-f]{64}", str(record.get("sha256", "")))):
                 raise ValueError(f"Invalid transaction record for {relative}")
+            original_digest = record.get("original_sha256")
+            if record["existed"]:
+                if not re.fullmatch(r"[0-9a-f]{64}", str(original_digest)):
+                    raise ValueError(f"Invalid original fingerprint for {relative}")
+            elif original_digest is not None:
+                raise ValueError(f"Unexpected original fingerprint for new entry {relative}")
             group = "skills" if parts[0] == ".agents" else "agents"
             if group == "agents" and not parts[2].endswith(".toml"):
                 raise ValueError("Unrecognized agent destination")
@@ -658,6 +666,11 @@ def recover_transaction(args: argparse.Namespace) -> int:
         # Preflight all entries before undoing the first item. Unrecognized user
         # edits MUST remain untouched; operator must resolve those manually.
         for dest, backup, record in entries:
+            if backup.exists():
+                if not record["existed"]:
+                    raise ValueError(f"Unexpected backup for new destination: {dest}")
+                if fingerprint(backup) != record["original_sha256"]:
+                    raise ValueError(f"Recovery refused: original backup was modified: {backup}")
             if path_exists(dest):
                 matches_staged = fingerprint(dest) == record["sha256"]
                 if backup.exists() or not record["existed"]:
@@ -794,7 +807,7 @@ def install(args: argparse.Namespace) -> int:
             # Write a checksummed, pending undo plan BEFORE the first move.
             scope_root = skill_dir.parent.parent
             journal = {
-                "version": 1,
+                "version": 2,
                 "state": "pending",
                 "scope_root": str(scope_root.absolute()),
                 "entries": [
