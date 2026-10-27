@@ -48,6 +48,13 @@ class P0Tests(unittest.TestCase):
         self.assertIn("Codex sequential workflow", orchestrator)
         self.assertIn("--mode solo", orchestrator)
         self.assertNotIn("--mode fanout", orchestrator)
+        game_skill = (base / "create-roblox-game" / "SKILL.md").read_text()
+        self.assertIn("Running it (Codex sequential mode)", game_skill)
+        self.assertNotIn("--mode fanout", game_skill)
+        self.assertNotIn("FAN OUT THE ASSET BLOCK", game_skill)
+        setup_skill = (base / "roblox-skills-setup" / "SKILL.md").read_text()
+        self.assertNotIn("Ask Claude to", setup_skill)
+        self.assertNotIn("add it to Claude", setup_skill)
 
     def test_mcp_and_relocation(self):
         self.install(apply=True)
