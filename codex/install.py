@@ -615,8 +615,11 @@ def recover_transaction(args: argparse.Namespace) -> int:
     """Explicit undo for a pending install; refuse user-edited destinations."""
     skill_dir, agent_dir, backup_root = targets(args.scope, args.project_root)
     root = skill_dir.parent.parent
-    transaction = args.recover.expanduser().absolute()
-    if transaction.is_symlink() or transaction.parent != backup_root.absolute():
+    supplied = args.recover.expanduser()
+    if supplied.is_symlink():
+        raise ValueError("Symlinked recovery transaction directory refused")
+    transaction = supplied.resolve()
+    if transaction.parent != backup_root.resolve():
         raise ValueError(f"Recovery requires a direct transaction under {backup_root}")
     with installation_lock(root):
         assert_safe_targets(skill_dir, agent_dir, backup_root, [])
@@ -817,19 +820,31 @@ def install(args: argparse.Namespace) -> int:
                     print(f"Installed: {dest}")
             except Exception as failure:
                 errors = []
-                for dest in reversed(attempted):
-                    try:
-                        if dest.is_dir() and not dest.is_symlink():
-                            shutil.rmtree(dest)
-                        elif dest.exists() or dest.is_symlink():
-                            dest.unlink()
-                    except OSError as exc:
-                        errors.append(f"could not clear {dest}: {exc}")
-                for dest, backup in reversed(saved):
-                    try:
-                        shutil.move(str(backup), str(dest))
-                    except OSError as exc:
-                        errors.append(f"could not restore {dest}: {exc}")
+                # Moving an original to backup may succeed on disk then raise.
+                # Inspect actual backup presence, rather than only in-memory
+                # save bookkeeping, to restore those originals as well.
+                for item, dest, backup in reversed(installs):
+                    if backup is not None and backup.exists():
+                        if backup.is_symlink():
+                            errors.append(f"symlinked backup refused: {backup}")
+                            continue
+                        try:
+                            if dest.is_dir() and not dest.is_symlink():
+                                shutil.rmtree(dest)
+                            elif path_exists(dest):
+                                dest.unlink()
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.move(str(backup), str(dest))
+                        except OSError as exc:
+                            errors.append(f"could not restore {dest}: {exc}")
+                    elif backup is None and dest in attempted:
+                        try:
+                            if dest.is_dir() and not dest.is_symlink():
+                                shutil.rmtree(dest)
+                            elif path_exists(dest):
+                                dest.unlink()
+                        except OSError as exc:
+                            errors.append(f"could not clear {dest}: {exc}")
                 detail = "; ".join(errors) if errors else "all overwritten destinations restored"
                 if not errors:
                     journal["state"] = "recovered"
@@ -838,6 +853,7 @@ def install(args: argparse.Namespace) -> int:
                     f"Installation failed; rollback attempted ({detail}). "
                     f"Transaction: {backup_base}"
                 ) from failure
+
 
             journal["state"] = "complete"
             write_transaction(journal_file, journal)
