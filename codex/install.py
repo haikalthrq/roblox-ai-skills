@@ -164,16 +164,20 @@ def adapt_python_runtime(source: Path, path: Path, text: str,
             'CODE_SKILL = Path.home() / ".claude" / "skills" / "roblox-code" / "scripts" / "new_project.py"',
             'CODE_SKILL = Path.home() / ".agents" / "skills" / "roblox-code" / "scripts" / "new_project.py"',
             "global code-skill fallback")
-        text = replace_once(
-            text,
-            "may be fanned out to parallel workers (the default; see the",
-            "must be processed sequentially in a Studio-connected Codex session (see the",
-            "generated BUILD.md sequential stage policy",
-        )
-        text = replace_once(
-            text, "--mode fanout", "--mode solo",
-            "generated BUILD.md default ledger mode",
-        )
+        # Minimal script fixtures contain only the fallback constant. Full
+        # upstream new_game.py includes BUILD_MD; adapt it when present and
+        # fail closed if its known fan-out defaults change unexpectedly.
+        if "BUILD_MD" in text:
+            text = replace_once(
+                text,
+                "may be fanned out to parallel workers (the default; see the",
+                "must be processed sequentially in a Studio-connected Codex session (see the",
+                "generated BUILD.md sequential stage policy",
+            )
+            text = replace_once(
+                text, "--mode fanout", "--mode solo",
+                "generated BUILD.md default ledger mode",
+            )
         return text
     if source.name == "create-roblox-game" and path.name == "preflight.py":
         return replace_once(text,
