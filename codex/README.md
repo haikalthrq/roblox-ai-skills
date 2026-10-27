@@ -62,8 +62,7 @@ python codex/install.py --scope project --project-root "/path/to/project" \
 
 For user scope use `--scope user` and a transaction under `~/.codex-backups/`.
 `--recover` **mutates files** and requires explicit authorization; it is
-never automatic. The recovery verifies all destinations and checksums before
-undoing moves. Unknown edits to installed artifacts are left untouched and
+never automatic. The recovery verifies generated destinations **and the original backups** against recorded fingerprints before undoing moves. Unknown edits to installed artifacts are left untouched and
 cause an explicit refusal. Files never backed up are not guessed at; inspect
 the recovered tree and use setup checks before retrying the installer.
 

@@ -147,6 +147,17 @@ class P1ReliabilityTests(unittest.TestCase):
         self.assertEqual((target / "LOCAL.md").read_text(encoding="utf-8"), "preserve me")
         self.assertEqual(len(self.journal_dirs("recovered")), 1)
 
+    def test_recovery_refuses_tampered_original_backup(self):
+        self.assertEqual(self.install(), 0)
+        txn = self.interrupted_install(force=True)
+        backup = txn / "skills" / "create-roblox-game" / "SKILL.md"
+        self.assertTrue(backup.is_file())
+        backup.write_bytes(backup.read_bytes() + b"\n# unexpected backup edit\n")
+        with self.assertRaisesRegex(ValueError, "original backup was modified"):
+            adapter.recover_transaction(self.args(recover=txn))
+        self.assertEqual(self.journal_dirs("pending"), [txn])
+        self.assertTrue(backup.is_file())
+
     def test_recovery_refuses_to_remove_post_crash_user_edits(self):
         txn = self.interrupted_install()
         updated = self.project / ".agents" / "skills" / "create-roblox-game" / "SKILL.md"
