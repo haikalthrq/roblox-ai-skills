@@ -6,6 +6,15 @@ definitions to Codex TOML is **off by default**: subagents may inherit the
 parent session's Studio MCP access. The upstream `skills/`, `agents/`,
 `install.sh`, and `install.ps1` remain unchanged.
 
+## Start here
+
+This installer is **dry-run first** and never installs external dependencies.
+Choose **user scope** for personal skills, or **project scope** for one
+existing workspace. Do not use a game repository or Project Antares as a
+disposable test fixture. [Troubleshooting](TROUBLESHOOTING.md) covers refusals,
+stale locks and failed recovery; [runtime validation](VALIDATION.md) is a
+separate, explicitly authorized activity.
+
 ## Install into Codex
 
 Requires Python 3.11+, Codex, and a checkout of this repository.
@@ -31,10 +40,18 @@ python codex/install.py --scope project --project-root "/path/to/game-repo" --ap
 
 This installs skill copies into that project's `.agents/skills/`; optional
 subagent definitions go to `.codex/agents/` only after explicit opt-in.
-Project-scoped examples use relative project-root paths; installed setup scripts derive locations from their file location, so moving a project does not embed obsolete absolute paths. Install does not create or modify a Roblox game.
+Project-scoped examples use project-root-relative paths; installed setup
+scripts derive locations from their own file location, so relocating the
+project does not embed the original machine's absolute paths. The installer
+does not create or modify a Roblox game. Run generated relative-path examples
+from the project root.
 
 The installer refuses to replace an installed skill or agent by default.
-Use `--force --apply` to create a uniquely named backup under `.codex-backups/` and preserve existing `LOCAL.md`. Backup paths are prechecked; recoverable errors trigger best-effort rollback. This is not crash-atomic. Keep secrets out of `LOCAL.md`.
+Use `--force --apply` only after inspecting existing destinations and
+authorizing their replacement. It creates a uniquely named backup in
+`.codex-backups/` and preserves an existing `LOCAL.md`. Recoverable errors
+trigger best-effort rollback; interruption recovery is manual. **It is not
+crash-atomic.** Never store secrets in `LOCAL.md`.
 
 ## P1 installer concurrency and recovery
 
@@ -56,18 +73,18 @@ lock *manually* only after proving the process is stopped. Then explicitly
 request recovery using the same scope and project root:
 
 ```bash
-python codex/install.py --scope project --project-root "/path/to/project" \
-  --recover "/path/to/project/.codex-backups/<transaction-folder>"
+python codex/install.py --scope project --project-root "/path/to/project" --recover "/path/to/project/.codex-backups/<transaction-folder>"
 ```
 
 For user scope use `--scope user` and a transaction under `~/.codex-backups/`.
 `--recover` **mutates files** and requires explicit authorization; it is
-never automatic. The recovery verifies generated destinations **and the original backups** against recorded fingerprints before undoing moves. Unknown edits to installed artifacts are left untouched and
-cause an explicit refusal. An originally-existing destination without a backup is preserved only when
-its fingerprint still matches the original journal fingerprint. Missing
-backups with staged or edited destinations block recovery rather than
-reporting success. Inspect the recovered tree and use setup checks before
-retrying the installer.
+never automatic. Recovery verifies generated destinations **and original backups** against
+recorded fingerprints before undoing moves. Unexpected user edits cause a
+refusal without deleting them. If an original backup is missing, recovery
+continues only when the unchanged original is still at its destination; it
+never reports success when the original is missing. Inspect the transaction
+and recovered tree before retrying the installer. See
+[the diagnostic guide](TROUBLESHOOTING.md#recovery-after-an-interruption).
 
 Locks are not auto-stolen by PID or age, because a PID may be reused and
 removing a live lock can cause data loss. The supported recovery handles
@@ -116,7 +133,13 @@ python codex/install.py --scope user --enable-custom-agents --accept-subagent-mc
 ```
 
 `--accept-subagent-mcp-inheritance` is explicit **risk acceptance**, not proof of Studio MCP isolation. Built-in Codex agents may also inherit parent tools. Do not delegate Studio-connected work.
-An existing Codex installation may contain custom TOML roles from any source. A default --apply scans global, CODEX_HOME, project ancestor, and invoking working-directory ancestor agent locations and refuses to proceed if roles exist. Dry-run displays them; built-in workers remain unaffected. Explicitly disable multi-agent support in effective Codex config when Studio is connected.
+
+An existing Codex installation may contain custom TOML roles from any
+source. Default `--apply` scans the user, `CODEX_HOME`, project-ancestor,
+and invoking-directory ancestor agent locations, refusing to proceed if roles
+exist. Dry-run displays those paths; built-in agents are unaffected. Review
+the effective Codex multi-agent configuration before a Studio-connected
+session. This installer cannot disable runtime workers for you.
 
 When opted in, the installer converts the seven `agents/*.md` role descriptions
 into standalone TOML under the Codex agent directory. The conversion carries over
@@ -138,15 +161,22 @@ before trusting a parallel build. In particular:
 
 ## What has and has not been verified
 
+The **P0/P1 offline installer and adapter** were independently tested before
+release to `main`: 33 tests on six CI OS/Python combinations for
+[`dc18907`](https://github.com/haikalthrq/roblox-ai-skills/commit/dc18907fd3d2591c24939bbe508dbba1ee667c5e).
+That does not establish a live Codex or Studio session. See the
+[manual runtime evidence checklist](VALIDATION.md).
+
 The adapter is a source-level conversion. Installed copies now adjust
 `check_setup.py` environment discovery, `new_game.py` skill lookup, and
 `preflight.py` fallback paths for Codex. Static review of this repository
 is **not** proof of Codex role selection, Studio MCP access, tests passing,
 or a functioning generated game. After an explicitly approved local install,
-validate in this order: confirm Codex skill discovery; confirm agent
-discovery in your Codex version; inspect required tool availability; dry-run
-the setup checks; then explicitly approve the code/map/UI smoke tests and
-Studio checks relevant to your project.
+validate in this order: confirm Codex skill discovery; inspect required
+tools and run only approved setup checks; if optional custom agents were
+installed, verify their discovery and inherited access **in a Studio-free
+session**; and only then separately authorize disposable-project code/map/UI
+smoke tests and Studio MCP checks.
 
 This repository is a **skill pack**, not the Project Antares game repository.
 For Antares, carry forward its authoritative Wayfinder map, decisions

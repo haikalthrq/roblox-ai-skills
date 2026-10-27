@@ -86,6 +86,7 @@ def replace_claude_paths(text: str, skill_dir: Path, agent_dir: Path) -> str:
         ("claude mcp add", "codex mcp add"),
         ("Claude\nCode", "Codex"),
         ("Claude Code", "Codex"),
+        ("CLAUDE CODE", "CODEX"),
         ("Ask Claude to ", "Ask Codex to "),
         ("ask Claude to ", "ask Codex to "),
         ("Claude client's", "agent client's"),
@@ -182,10 +183,18 @@ def adapt_python_runtime(source: Path, path: Path, text: str,
             )
         return text
     if source.name == "create-roblox-game" and path.name == "preflight.py":
-        return replace_once(text,
+        text = replace_once(text,
             'SKILLS = Path.home() / ".claude" / "skills"',
             'SKILLS = Path.home() / ".agents" / "skills"',
             "global preflight fallback")
+        if "roblox-build-orchestrator" in text:
+            text = replace_once(
+                text,
+                "the ledger, stall rule and fan-out decision",
+                "the ledger, stall checks and sequential stage-budget review",
+                "Codex preflight orchestrator guidance",
+            )
+        return text
     if source.name == "create-roblox-game" and path.name == "section.py":
         return replace_once(
             text,
@@ -234,6 +243,14 @@ def codex_orchestrator(text: str) -> str:
         "new runtime security review and explicit authorisation.\n\n"
         "See references/write-boundary.md for the single-writer constraint.\n\n")
     text = text.replace("--mode fanout", "--mode solo")
+    text = text.replace(
+        "did the fan-out pay off, from what was measured",
+        "review sequential stage budgets from measured timings",
+    )
+    text = text.replace(
+        "stage timings and tells you whether the split paid off",
+        "stage timings and identifies budget overruns",
+    )
     return text
 
 
@@ -350,6 +367,12 @@ def codex_run_log(text: str) -> str:
         "  run_log.py decide             # solo vs fan-out recommendation from measured data",
         "  run_log.py decide             # sequential stage-budget review",
         "Codex ledger usage instructions",
+    )
+    text = replace_once(
+        text,
+        "# of the design spec, which is the only set the fan-out decision applies to.",
+        "# of the design spec; the Codex ledger reviews their sequential budgets.",
+        "Codex ledger plan comment",
     )
     return text
 

@@ -97,7 +97,7 @@ $roblox-ui
 
 **Do not immediately run an end-to-end build.** First inspect the setup skill's instructions and dependency checks. Only run setup commands, smoke tests, Studio actions, or game-generating scripts after giving those actions their own authorization.
 
-See [`codex/README.md`](codex/README.md) for the detailed integration and verification steps, including Studio MCP and subagent limitations.
+See [Codex setup](codex/README.md), [troubleshooting](codex/TROUBLESHOOTING.md) and [runtime validation](codex/VALIDATION.md). These are separate from the installer itself; none performs a Studio action automatically.
 
 ## Claude Code setup
 
@@ -140,20 +140,24 @@ The adapter can translate seven Markdown roles into Codex TOML, but it **install
 
 Project-specific plans and explicit approvals still govern implementation. A planning decision does not authorize installation, running tests, changing a game, accessing a paid service, or publishing assets.
 
+## Offline release and validation status
+
+P0 and P1 were released after independent offline audits. P2 improves instructions and generated-copy wording; do not count it as new Studio runtime validation. Permission to plan is not permission to install dependencies, run tests in a real game, or write/publish assets.
+
 ## Known limitations and verification status
 
 | Check | Current status for this fork |
 | --- | --- |
 | 11 source skills and 7 source agent definitions present | Present in repository |
-| Codex installation adapter and optional TOML conversion code | Implemented on disk; not runtime-validated |
-| Codex installation on an end user's computer | Not verified |
+| Codex offline adapter, P1 backup/recovery and optional TOML conversion | **Offline verified** in released P0/P1 scope; live integration unverified |
+| Codex installation on an end user's computer | Not independently verified (isolated CI installs passed) |
 | Automatic Codex skill discovery and custom subagent execution | Not verified |
 | Roblox Studio MCP connection / single-writer enforcement | Not verified |
 | Four code checks and UI/map smoke tests against this Codex port | Not run as part of the adaptation |
 | Blender / GPU asset generation from Codex | Not verified |
 | Full Roblox game build, playtest, and publication | Not verified |
 
-Tests for parts of the installer exist under [`tests/test_codex_installer.py`](tests/test_codex_installer.py), but adding tests is **not** the same as running them. Validate the target machine and toolchain before relying on this port for production development.
+The [offline test suite](tests/) includes installer, P0 and P1 regression tests. At the P1 release commit [`dc18907`](https://github.com/haikalthrq/roblox-ai-skills/commit/dc18907fd3d2591c24939bbe508dbba1ee667c5e), **33 tests passed in all six CI OS/Python jobs**, and independent Muse audit found the offline P1 scope ready. [View that CI run](https://github.com/haikalthrq/roblox-ai-skills/actions/runs/40576870315). This is a *historical, commit-specific result*, not proof of Codex runtime discovery, Studio MCP connectivity, tool isolation, or any later untested change.
 
 ### Kaggle GPU pipeline is disabled
 
@@ -171,8 +175,10 @@ agents/                Original Claude Code agent definitions (7)
 install.ps1            Original Windows installer for Claude Code
 install.sh             Original macOS/Linux installer for Claude Code
 codex/install.py       Dry-run-first Codex installer and adapter
-codex/README.md        Extended Codex setup and verification notes
-tests/                 Installer tests (execution not yet verified)
+codex/README.md        Codex setup and recovery reference
+codex/TROUBLESHOOTING.md  Safe error diagnosis and recovery guide
+codex/VALIDATION.md    Separate runtime validation checklist
+tests/                 Automated installer and adapter regression tests
 AGENTS.md              Repository instructions for Codex
 LICENSE.txt            Original usage and redistribution terms
 ```

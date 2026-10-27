@@ -8,6 +8,9 @@ to make a Codex install work.
 
 - Prefer small, reviewable changes; keep a clear distinction between
   documentation, source adaptation, actual installation, and runtime proof.
+  For P2 docs, verify example CLI flags against codex/install.py, ensure
+  relative links resolve, and keep CI outcomes tied to exact commit SHAs.
+  Do not claim a Studio runtime test passed because documentation changed.
 - Do not claim Codex, its custom subagents, Studio MCP, Blender, or GPU stages
   are working until checked in the target environment.
 - No package/dependency installation, file generation in game repositories,
