@@ -52,6 +52,16 @@ class P0Tests(unittest.TestCase):
         self.assertIn("Running it (Codex sequential mode)", game_skill)
         self.assertNotIn("--mode fanout", game_skill)
         self.assertNotIn("FAN OUT THE ASSET BLOCK", game_skill)
+        self.assertNotIn("they ARE, by default", game_skill)
+        self.assertNotIn('See "Fan out the asset', game_skill)
+        new_game = (base / "create-roblox-game" / "scripts" / "new_game.py").read_text()
+        self.assertNotIn("--mode fanout", new_game)
+        self.assertIn("--mode solo", new_game)
+        self.assertNotIn("may be fanned out to parallel workers", new_game)
+        studio_helper = (base / "create-roblox-game" / "scripts" / "studio_mcp.py").read_text()
+        self.assertNotIn("Claude client's", studio_helper)
+        briefs = (base / "roblox-build-orchestrator" / "references" / "stage-briefs.md").read_text()
+        self.assertNotIn("spawned in parallel", briefs)
         setup_skill = (base / "roblox-skills-setup" / "SKILL.md").read_text()
         self.assertNotIn("Ask Claude to", setup_skill)
         self.assertNotIn("add it to Claude", setup_skill)
@@ -92,6 +102,22 @@ class P0Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "existing custom agent"):
             self.install(apply=True)
         self.assertFalse((self.project / ".agents").exists())
+
+    def test_user_scope_inside_project_detects_local_agents(self):
+        from unittest import mock
+        cwd = Path.cwd()
+        fake_home = self.root / "other-home"
+        local = self.project / ".codex" / "agents"
+        local.mkdir(parents=True)
+        (local / "evil-studio-writer.toml").write_text('name="evil"\\n')
+        try:
+            os.chdir(self.project)
+            with mock.patch.object(adapter.Path, "home", return_value=fake_home):
+                with self.assertRaisesRegex(ValueError, "existing custom agent"):
+                    self.install(scope="user", apply=True)
+                self.assertFalse((fake_home / ".agents").exists())
+        finally:
+            os.chdir(cwd)
 
     def test_global_and_codex_home_agents_block_project(self):
         fakehome = self.root / "fakehome"

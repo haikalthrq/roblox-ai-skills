@@ -86,7 +86,7 @@ def replace_claude_paths(text: str, skill_dir: Path, agent_dir: Path) -> str:
         ("Claude Code", "Codex"),
         ("Ask Claude to ", "Ask Codex to "),
         ("ask Claude to ", "ask Codex to "),
-        ("Claude client's cached tool schema", "agent client's cached tool schema"),
+        ("Claude client's", "agent client's"),
     ):
         text = text.replace(before, after)
     return text
@@ -160,10 +160,21 @@ def adapt_python_runtime(source: Path, path: Path, text: str,
 '''
         return prefix + implementation + end + suffix
     if source.name == "create-roblox-game" and path.name == "new_game.py":
-        return replace_once(text,
+        text = replace_once(text,
             'CODE_SKILL = Path.home() / ".claude" / "skills" / "roblox-code" / "scripts" / "new_project.py"',
             'CODE_SKILL = Path.home() / ".agents" / "skills" / "roblox-code" / "scripts" / "new_project.py"',
             "global code-skill fallback")
+        text = replace_once(
+            text,
+            "may be fanned out to parallel workers (the default; see the",
+            "must be processed sequentially in a Studio-connected Codex session (see the",
+            "generated BUILD.md sequential stage policy",
+        )
+        text = replace_once(
+            text, "--mode fanout", "--mode solo",
+            "generated BUILD.md default ledger mode",
+        )
+        return text
     if source.name == "create-roblox-game" and path.name == "preflight.py":
         return replace_once(text,
             'SKILLS = Path.home() / ".claude" / "skills"',
@@ -231,6 +242,15 @@ def codex_create_game(text: str) -> str:
         "stage gates and approval boundaries. Do not begin implementation "
         "merely because a planning document was approved.\n\n"
     ) + end + after
+    text = replace_once(
+        text,
+        'they ARE, by default - one `roblox-asset-*` worker each. See "Fan out the asset'
+        '\nblock" under Running it for the measurement that changed this.',
+        'in Codex Studio sessions, they MUST run sequentially under the primary'
+        '\nsession. No asset worker can access Studio; see "Running it" for the'
+        '\nCodex sequential stage policy.',
+        "create-game early default parallel guidance",
+    )
     text = text.replace("--mode fanout", "--mode solo")
     text = text.replace(
         "**Fan-out is allowed inside sections 3 and 4**",
@@ -260,6 +280,13 @@ def adapt_skill(source: Path, destination: Path, skill_dir: Path, agent_dir: Pat
             after = codex_orchestrator(after)
         if source.name == "create-roblox-game" and path.name == "SKILL.md":
             after = codex_create_game(after)
+        if source.name == "roblox-build-orchestrator" and path.name == "stage-briefs.md":
+            after = replace_once(
+                after,
+                "## roblox-market-scout (one per genre, spawned in parallel)",
+                "## roblox-market-scout (sequential in Studio-connected Codex sessions)",
+                "stage-briefs Studio-connected scout mode",
+            )
         # Claude's installer copied Markdown roles. Codex needs generated TOML.
         if source.name == "roblox-build-orchestrator" and path.name == "SKILL.md":
             after = re.sub(
@@ -334,9 +361,10 @@ def observed_agent_files(agent_dir: Path, scope: str, project_root: Path) -> lis
     roots = {agent_dir, Path.home() / ".codex" / "agents"}
     if os.environ.get("CODEX_HOME"):
         roots.add(Path(os.environ["CODEX_HOME"]).expanduser() / "agents")
-    if scope == "project":
-        project_root = project_root.resolve()
-        for parent in (project_root, *project_root.parents):
+    # Both scope and invocation context matter: a user-scoped install may
+    # be run from a game repo whose project agents are already in effect.
+    for context in (project_root.resolve(), Path.cwd().resolve()):
+        for parent in (context, *context.parents):
             roots.add(parent / ".codex" / "agents")
     found = set()
     for root in roots:

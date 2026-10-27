@@ -15,7 +15,7 @@ This is a community fork of [SyphoDev's original `roblox-ai-skills`](https://git
 | Invoke a skill | `/roblox-code` | `$roblox-code` |
 | Detailed instructions | [Claude Code setup](#claude-code-setup) | [Codex setup](#openai-codex-setup) and [Codex adapter notes](codex/README.md) |
 
-The Codex installer **copies and adjusts** the skills. Seven optional role definitions can be converted into TOML only after verifying subagent tool isolation. The default is sequential mode without custom subagents. This is not proof that every script, agent, or Studio interaction already works on the target machine. The Claude Code installer is **not** the Codex installer; do not run it to configure Codex.
+The Codex installer **copies and adjusts** the skills. Seven optional role definitions can be converted into TOML only through explicit MCP-inheritance risk acceptance in a Studio-free session. The adapter does not prove or enforce tool isolation. The default is sequential mode without custom subagents. This is not proof that every script, agent, or Studio interaction already works on the target machine. The Claude Code installer is **not** the Codex installer; do not run it to configure Codex.
 
 ## What is included
 
@@ -85,7 +85,7 @@ python codex/install.py --scope project --project-root "/path/to/your/project"
 python codex/install.py --scope project --project-root "/path/to/your/project" --apply
 ```
 
-Project scope writes skill copies into that project's `.agents/skills/`. Optional role TOML goes into `.codex/agents/` only after isolation is verified. The installer defaults to a **dry run**; `--apply` is required to change files. It scans existing custom agent TOML files across user and project scopes, blocking sequential-default installation when legacy roles remain. It refuses to replace existing installations unless you explicitly use `--force --apply`, which backs up old skill/agent paths under `.codex-backups/` and carries forward existing `LOCAL.md` files. Review local settings before replacing anything.
+Project scope writes skill copies into that project's `.agents/skills/`. Optional role TOML goes into `.codex/agents/` only after explicit risk acceptance in a Studio-free session; this is not verification of MCP isolation. The installer defaults to a **dry run**; `--apply` is required to change files. It scans existing custom agent TOML files across user and project scopes, blocking sequential-default installation when legacy roles remain. It refuses to replace existing installations unless you explicitly use `--force --apply`, which backs up old skill/agent paths under `.codex-backups/` and carries forward existing `LOCAL.md` files. Review local settings before replacing anything.
 
 After installation, open Codex in the relevant workspace, confirm that the skills are discoverable, and invoke a skill by name, for example:
 

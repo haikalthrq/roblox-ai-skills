@@ -76,7 +76,7 @@ python codex/install.py --scope user --enable-custom-agents --accept-subagent-mc
 ```
 
 `--accept-subagent-mcp-inheritance` is explicit **risk acceptance**, not proof of Studio MCP isolation. Built-in Codex agents may also inherit parent tools. Do not delegate Studio-connected work.
-An existing Codex installation may contain custom TOML roles from any source. A default --apply scans global, CODEX_HOME, and project ancestor agent locations and refuses to proceed if roles exist. Dry-run displays them; built-in workers remain unaffected. Explicitly disable multi-agent support in effective Codex config when Studio is connected.
+An existing Codex installation may contain custom TOML roles from any source. A default --apply scans global, CODEX_HOME, project ancestor, and invoking working-directory ancestor agent locations and refuses to proceed if roles exist. Dry-run displays them; built-in workers remain unaffected. Explicitly disable multi-agent support in effective Codex config when Studio is connected.
 
 When opted in, the installer converts the seven `agents/*.md` role descriptions
 into standalone TOML under the Codex agent directory. The conversion carries over
