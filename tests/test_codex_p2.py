@@ -23,6 +23,7 @@ class P2DocumentationTests(unittest.TestCase):
             ROOT / "codex" / "README.md",
             ROOT / "codex" / "TROUBLESHOOTING.md",
             ROOT / "codex" / "VALIDATION.md",
+            ROOT / "codex" / "RUNTIME_EVIDENCE.md",
         ]
         for file in markdown:
             self.assertTrue(file.is_file(), str(file))
@@ -40,17 +41,39 @@ class P2DocumentationTests(unittest.TestCase):
         overview = (ROOT / "README.md").read_text(encoding="utf-8")
         codex = (ROOT / "codex" / "README.md").read_text(encoding="utf-8")
         validation = (ROOT / "codex" / "VALIDATION.md").read_text(encoding="utf-8")
-        self.assertIn("38/38 tests", overview)
+        evidence = (ROOT / "codex" / "RUNTIME_EVIDENCE.md").read_text(encoding="utf-8")
+        self.assertIn("38/38 offline tests", overview)
         self.assertIn("all 6 CI jobs", overview)
         self.assertIn("d0e8b91f79a55a394b963a91865e3b58cf3a3742", overview)
-        self.assertIn("not yet validated", overview)
+        self.assertIn("operator reports", overview)
+        self.assertIn("codex/RUNTIME_EVIDENCE.md", overview)
+        self.assertNotIn("not yet validated", overview)
         self.assertIn("38 tests", codex)
         self.assertIn("runtime", codex.lower())
-        self.assertIn("Status: NOT TESTED", validation)
+        self.assertIn("Status: PARTIALLY VALIDATED, operator-reported", validation)
+        self.assertIn("Gate 2 — Authenticated Codex skill discovery (PASS, tested environment)", validation)
+        self.assertIn("Gate 3 — Optional subagents / MCP inheritance (UNVERIFIED)", validation)
+        self.assertIn("Gate 4 — Studio MCP and single-writer safety (PARTIAL)", validation)
         self.assertIn("d0e8b91", validation)
         self.assertIn("D-228", validation)
         self.assertIn("NOT ENFORCED", validation)
         self.assertIn("separately authorized", validation)
+        for content in (codex, validation):
+            self.assertIn("RUNTIME_EVIDENCE.md", content)
+        self.assertIn("VALIDATION.md", evidence)
+        for content in (codex, validation, evidence):
+            self.assertIn("independently reproduced or audited", " ".join(content.split()))
+        self.assertIn("d0e8b91f79a55a394b963a91865e3b58cf3a3742", evidence)
+        self.assertIn("11/11 skills discovered", evidence)
+        self.assertIn("11/11 instruction sets loaded", evidence)
+        self.assertIn("EXPECTED WARNING ACCEPTED", evidence)
+        self.assertIn("`RESULT: WARN`, exit code 1", evidence)
+        self.assertIn("No custom agents", evidence)
+        self.assertIn("D-228 remains **UNPROVEN**", evidence)
+        for boundary in ("Subagent MCP isolation", "technical single-writer enforcement",
+                         "sandbox", "concurrent Studio writes"):
+            self.assertIn(boundary, evidence)
+        self.assertNotRegex(evidence, r"[A-Za-z]:[\\/]")
 
     def test_documented_project_paths_use_one_placeholder(self):
         docs = [

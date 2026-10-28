@@ -1,10 +1,13 @@
 # Codex–Roblox Studio runtime validation plan
 
-**Status: NOT TESTED.** This document is an operator checklist, not evidence
-that the steps below succeeded. The P0–P2 offline adapter and maintenance were
-independently audited through `d0e8b91` (38 tests; six passing CI jobs).
-CI is a different evidence category from authenticated Codex or Roblox Studio
-execution.
+**Status: PARTIALLY VALIDATED, operator-reported.** Windows Codex Desktop
+skill discovery/loading and limited disposable Studio MCP checks passed at
+`d0e8b91`; runtime security boundaries remain unverified. See
+[runtime evidence and limitations](RUNTIME_EVIDENCE.md). Muse has not
+independently reproduced or audited these runtime results. The P0–P2 offline
+adapter and maintenance were independently audited through `d0e8b91`
+(38 tests; six passing CI jobs). This checklist remains the methodology;
+offline CI and runtime observations are separate evidence categories.
 
 ## Gate 0 — Explicit authorization
 
@@ -32,7 +35,11 @@ A release claim must cite its own matching CI run and per-platform results,
 not a previous commit's tests. This gate validates installer copies,
 transaction recovery and safety constraints only.
 
-## Gate 2 — Authenticated Codex skill discovery (NOT TESTED)
+## Gate 2 — Authenticated Codex skill discovery (PASS, tested environment)
+
+The operator reports discovery and instruction loading for 11/11 skills,
+with matching installed `SKILL.md` paths and front matter. This establishes
+loading in the tested environment, not operational readiness of all skills.
 
 With authorization in an **empty disposable project**:
 
@@ -51,7 +58,10 @@ With authorization in an **empty disposable project**:
 **Pass criterion:** concrete observed skill discovery for each requested
 skill. A file's presence alone is insufficient.
 
-## Gate 3 — Optional subagents / MCP inheritance (NOT TESTED)
+## Gate 3 — Optional subagents / MCP inheritance (UNVERIFIED)
+
+No custom agents were installed or exercised in the reported runtime checks.
+Subagent inheritance and isolation remain unverified.
 
 Custom roles are disabled by default. To examine inheritance, first use a
 separately authorized **Studio-free** Codex session. Inspect the effective
@@ -68,7 +78,12 @@ exposure to delegated file workers. If the runtime cannot provide this
 boundary, keep all Studio-connected stages sequential and mark isolation
 **UNPROVEN**.
 
-## Gate 4 — Studio MCP and single-writer safety (NOT TESTED)
+## Gate 4 — Studio MCP and single-writer safety (PARTIAL)
+
+Operator-reported connectivity, DataModel reads and one reversible Folder
+mutation: **PASS** in the disposable place. Tree-search coverage was truncated.
+Technical single-writer enforcement: **UNVERIFIED**. These results do not
+make the whole runtime security gate PASS.
 
 Only after separate approval and using a disposable Studio place:
 
@@ -92,13 +107,13 @@ Report:
 
 | Item | Evidence to record | Result |
 | --- | --- | --- |
-| Exact repository SHA | Commit and clean worktree | NOT TESTED |
-| Offline test and CI | Commands, counts, six job conclusions | NOT TESTED FOR THIS RUN |
-| Authenticated skill discovery | Actual Codex invocation and loaded skill paths | NOT TESTED |
-| Custom-agent inherited tools (optional) | Effective available tools, Studio-free session | NOT TESTED |
-| Studio MCP connectivity | Actual disposable Studio response | NOT TESTED |
-| Single-writer enforcement | Tested mechanism or explicit prompt-only limitation | NOT TESTED |
-| No Project Antares access | Fixture paths and authorization boundaries | REQUIRED |
+| Exact repository SHA | Tested adapter baseline and clean source | Operator reports `d0e8b91`; see runtime evidence |
+| Offline test and CI | Commands, counts, six job conclusions | Historical Muse/CI results at `d0e8b91`; no runtime audit |
+| Authenticated skill discovery | Actual Codex invocation and loaded skill paths | PASS, operator-reported 11/11 discovery and loading |
+| Custom-agent inherited tools (optional) | Effective available tools, Studio-free session | UNVERIFIED |
+| Studio MCP connectivity, reads and reversible write | Disposable Studio responses and before/after observations | PASS, operator-reported; limited read coverage |
+| Single-writer enforcement | Tested mechanism or explicit prompt-only limitation | UNVERIFIED |
+| No Project Antares access | Fixture scope and authorization boundaries | Operator reports no Antares assets or game files involved |
 
 Never change an item to PASS based on docs, adapter file layout, or passing
 offline CI alone. Project Antares D-228 stays **UNPROVEN** until separate,
@@ -106,6 +121,7 @@ authorized evidence meets that project's acceptance criteria.
 
 ## References
 
+- [Operator-reported Windows runtime evidence](RUNTIME_EVIDENCE.md)
 - [Codex setup and recovery](README.md)
 - [Troubleshooting and stale locks](TROUBLESHOOTING.md)
 - [Project overview](../README.md)

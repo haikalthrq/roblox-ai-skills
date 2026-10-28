@@ -169,9 +169,18 @@ succeeded. Earlier audited releases: P1
 [`dc18907`](https://github.com/haikalthrq/roblox-ai-skills/commit/dc18907fd3d2591c24939bbe508dbba1ee667c5e)
 (33 tests) and P2
 [`45d6755`](https://github.com/haikalthrq/roblox-ai-skills/commit/45d675545666da06d74bc30b388927039803a3bb)
-(37 tests). These are commit-specific offline results; live Codex and Studio
-behaviour remains unverified. See the
-[manual runtime evidence checklist](VALIDATION.md).
+(37 tests). These are commit-specific offline results.
+
+An operator reports Windows Codex Desktop validation at `d0e8b91`: all 11
+skills were discovered and loaded, limited map/UI/ledger fixtures ran, and
+disposable Studio MCP connectivity, DataModel reads and a reversible Folder
+write passed. The map fixture was accepted with its expected P11 warning,
+not a zero-warning pass. See [runtime evidence](RUNTIME_EVIDENCE.md) for scope
+and provenance; Muse has not independently reproduced or audited these results.
+Subagent isolation, technical single-writer enforcement, sandbox enforcement
+and concurrent-write safety remain unverified. The full game workflow is
+untested. Keep the [runtime validation gates](VALIDATION.md) and separate
+authorization requirements.
 
 The adapter is a source-level conversion. Installed copies now adjust
 `check_setup.py` environment discovery, `new_game.py` skill lookup, and

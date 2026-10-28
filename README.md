@@ -2,7 +2,7 @@
 
 11 Roblox development skills and 7 optional specialist agents for code, maps, UI, 3D assets, textures, VFX, SFX, and animation. [SyphoDev](https://github.com/SyphoDev-yt/roblox-ai-skills) built the original Claude Code workflow; this fork adds an OpenAI Codex adapter.
 
-**Codex status:** P0–P2 and maintenance passed independent **offline** audits. At [`d0e8b91`](https://github.com/haikalthrq/roblox-ai-skills/commit/d0e8b91f79a55a394b963a91865e3b58cf3a3742), Muse passed **38/38 tests** and [all 6 CI jobs](https://github.com/haikalthrq/roblox-ai-skills/actions/runs/40638249774) passed (Python 3.11/3.12 on Linux, macOS, Windows). **Live Codex skill discovery, Roblox Studio MCP, and subagent isolation are not yet validated.**
+**Codex status:** At [`d0e8b91`](https://github.com/haikalthrq/roblox-ai-skills/commit/d0e8b91f79a55a394b963a91865e3b58cf3a3742), Muse passed **38/38 offline tests** and [all 6 CI jobs](https://github.com/haikalthrq/roblox-ai-skills/actions/runs/40638249774) passed. An operator reports Windows Codex Desktop discovery and instruction loading for all 11 skills, limited offline fixtures, and disposable Studio MCP reads and a reversible write; see [runtime evidence and limits](codex/RUNTIME_EVIDENCE.md). Muse has not independently reproduced or audited these runtime results; subagent isolation and technical single-writer enforcement remain unverified.
 
 ## Install
 
