@@ -80,9 +80,9 @@ This installs adjusted skill copies under `~/.agents/skills/` but **does not ins
 To install only in one existing project:
 
 ```bash
-python codex/install.py --scope project --project-root "/path/to/your/project"
+python codex/install.py --scope project --project-root "/path/to/workspace"
 # Inspect output first. Run the next command only when approved:
-python codex/install.py --scope project --project-root "/path/to/your/project" --apply
+python codex/install.py --scope project --project-root "/path/to/workspace" --apply
 ```
 
 Project scope writes skill copies into that project's `.agents/skills/`. Optional role TOML goes into `.codex/agents/` only after explicit risk acceptance in a Studio-free session; this is not verification of MCP isolation. The installer defaults to a **dry run**; `--apply` is required to change files. P1 adds an exclusive lock and a checksummed pending transaction journal for explicit recovery after process interruption. See [P1 recovery instructions](codex/README.md#p1-installer-concurrency-and-recovery). This is not crash-atomic. It scans existing custom agent TOML files across user and project scopes, blocking sequential-default installation when legacy roles remain. It refuses to replace existing installations unless you explicitly use `--force --apply`, which backs up old skill/agent paths under `.codex-backups/` and carries forward existing `LOCAL.md` files. Review local settings before replacing anything.
@@ -157,7 +157,7 @@ P0 and P1 were released after independent offline audits. P2 improves instructio
 | Blender / GPU asset generation from Codex | Not verified |
 | Full Roblox game build, playtest, and publication | Not verified |
 
-The [offline test suite](tests/) includes installer, P0 and P1 regression tests. At the P1 release commit [`dc18907`](https://github.com/haikalthrq/roblox-ai-skills/commit/dc18907fd3d2591c24939bbe508dbba1ee667c5e), **33 tests passed in all six CI OS/Python jobs**, and independent Muse audit found the offline P1 scope ready. [View that CI run](https://github.com/haikalthrq/roblox-ai-skills/actions/runs/40576870315). This is a *historical, commit-specific result*, not proof of Codex runtime discovery, Studio MCP connectivity, tool isolation, or any later untested change.
+The [offline test suite](tests/) includes installer, P0, P1, and P2 regression tests. At the P1 release commit [`dc18907`](https://github.com/haikalthrq/roblox-ai-skills/commit/dc18907fd3d2591c24939bbe508dbba1ee667c5e), **33 tests passed in the independent Linux audit**, and all **six CI OS/Python jobs succeeded** for that exact commit ([CI run](https://github.com/haikalthrq/roblox-ai-skills/actions/runs/40576870315)). The auditor could not independently retrieve each CI job's detailed test log, so its per-job test count was not separately established. At the P2 release commit [`45d6755`](https://github.com/haikalthrq/roblox-ai-skills/commit/45d675545666da06d74bc30b388927039803a3bb), **37 tests passed in the independent Linux audit** and [all six CI jobs succeeded](https://github.com/haikalthrq/roblox-ai-skills/actions/runs/40579232837). These are *historical, commit-specific offline results*, not proof of Codex runtime discovery, Studio MCP connectivity, tool isolation, or later untested changes.
 
 ### Kaggle GPU pipeline is disabled
 

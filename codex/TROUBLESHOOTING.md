@@ -63,7 +63,7 @@ directory under the selected scope's `.codex-backups/`, containing
    **User scope:**
 
    ```bash
-   python codex/install.py --scope user --recover "/path/to/your/home/.codex-backups/<transaction-id>"
+   python codex/install.py --scope user --recover "~/.codex-backups/<transaction-id>"
    ```
 
 5. Verify resulting skills and `LOCAL.md` before considering another apply.

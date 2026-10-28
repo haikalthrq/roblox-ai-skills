@@ -40,14 +40,36 @@ class P2DocumentationTests(unittest.TestCase):
         overview = (ROOT / "README.md").read_text(encoding="utf-8")
         codex = (ROOT / "codex" / "README.md").read_text(encoding="utf-8")
         validation = (ROOT / "codex" / "VALIDATION.md").read_text(encoding="utf-8")
-        self.assertIn("33 tests passed in all six CI OS/Python jobs", overview)
+        self.assertIn("33 tests passed in the independent Linux audit", overview)
+        self.assertIn("six CI OS/Python jobs succeeded", overview)
+        self.assertIn("P0, P1, and P2 regression tests", overview)
+        self.assertIn("37 tests passed in the independent Linux audit", overview)
+        self.assertIn("could not independently retrieve each CI job", overview)
         self.assertNotIn("Installer tests (execution not yet verified)", overview)
         self.assertIn("live integration unverified", overview)
-        self.assertIn("33 tests on six CI OS/Python combinations", codex)
+        self.assertIn("33 tests passed in the independent Linux audit", codex)
+        self.assertIn("six OS/Python CI jobs succeeded", codex)
+        self.assertIn("could not retrieve per-job test logs", codex)
         self.assertIn("Status: NOT TESTED", validation)
         self.assertIn("D-228", validation)
         self.assertIn("NOT ENFORCED", validation)
         self.assertIn("separately authorized", validation)
+
+    def test_documented_project_paths_use_one_placeholder(self):
+        docs = [
+            ROOT / "README.md",
+            ROOT / "codex" / "README.md",
+            ROOT / "codex" / "TROUBLESHOOTING.md",
+        ]
+        for path in docs:
+            content = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                self.assertNotIn("/path/to/game-repo", content)
+                self.assertNotIn("/path/to/project", content)
+                self.assertNotIn("/path/to/your/project", content)
+                self.assertIn("/path/to/workspace", content)
+        troubleshooting = docs[-1].read_text(encoding="utf-8")
+        self.assertIn('--recover "~/.codex-backups/<transaction-id>"', troubleshooting)
 
     def test_troubleshooting_matches_supported_recovery_cli(self):
         troubleshooting = (ROOT / "codex" / "TROUBLESHOOTING.md").read_text(encoding="utf-8")
@@ -92,6 +114,9 @@ class P2DocumentationTests(unittest.TestCase):
             ledger = (orchestrator / "scripts" / "run_log.py").read_text(encoding="utf-8")
             self.assertNotIn("did the fan-out pay off", skill)
             self.assertIn("review sequential stage budgets from measured timings", skill)
+            self.assertIn("## Start here (Codex sequential workflow)", skill)
+            self.assertIn("Start an approved ledger run with run_log.py init --run NAME --mode solo", skill)
+            self.assertNotIn("stage timings and tells you whether the split paid off", skill)
             self.assertNotIn("only set the fan-out decision applies to", ledger)
             self.assertIn("Codex ledger reviews their sequential budgets", ledger)
             self.assertNotIn("--mode fanout", ledger)

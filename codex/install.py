@@ -247,10 +247,6 @@ def codex_orchestrator(text: str) -> str:
         "did the fan-out pay off, from what was measured",
         "review sequential stage budgets from measured timings",
     )
-    text = text.replace(
-        "stage timings and tells you whether the split paid off",
-        "stage timings and identifies budget overruns",
-    )
     return text
 
 

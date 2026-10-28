@@ -34,8 +34,8 @@ are **not installed by default**; after an explicit opt-in, they go to
 To install only for a particular project instead of the whole user account:
 
 ```bash
-python codex/install.py --scope project --project-root "/path/to/game-repo"
-python codex/install.py --scope project --project-root "/path/to/game-repo" --apply
+python codex/install.py --scope project --project-root "/path/to/workspace"
+python codex/install.py --scope project --project-root "/path/to/workspace" --apply
 ```
 
 This installs skill copies into that project's `.agents/skills/`; optional
@@ -73,7 +73,7 @@ lock *manually* only after proving the process is stopped. Then explicitly
 request recovery using the same scope and project root:
 
 ```bash
-python codex/install.py --scope project --project-root "/path/to/project" --recover "/path/to/project/.codex-backups/<transaction-folder>"
+python codex/install.py --scope project --project-root "/path/to/workspace" --recover "/path/to/workspace/.codex-backups/<transaction-id>"
 ```
 
 For user scope use `--scope user` and a transaction under `~/.codex-backups/`.
@@ -162,8 +162,13 @@ before trusting a parallel build. In particular:
 ## What has and has not been verified
 
 The **P0/P1 offline installer and adapter** were independently tested before
-release to `main`: 33 tests on six CI OS/Python combinations for
+release to `main`: **33 tests passed in the independent Linux audit**
+and **six OS/Python CI jobs succeeded** for
 [`dc18907`](https://github.com/haikalthrq/roblox-ai-skills/commit/dc18907fd3d2591c24939bbe508dbba1ee667c5e).
+The independent auditor could not retrieve per-job test logs; the CI count
+refers to successful jobs, not independently counted tests in every job.
+P2 subsequently passed 37 local offline tests and six CI jobs at
+[`45d6755`](https://github.com/haikalthrq/roblox-ai-skills/commit/45d675545666da06d74bc30b388927039803a3bb).
 That does not establish a live Codex or Studio session. See the
 [manual runtime evidence checklist](VALIDATION.md).
 
