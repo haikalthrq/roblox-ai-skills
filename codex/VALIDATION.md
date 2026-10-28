@@ -1,9 +1,10 @@
 # Codex–Roblox Studio runtime validation plan
 
 **Status: NOT TESTED.** This document is an operator checklist, not evidence
-that the steps below succeeded. The shipped P0/P1 offline installer was
-independently audited at commit `dc18907`. CI is a different evidence category
-from authenticated Codex or Roblox Studio execution.
+that the steps below succeeded. The P0–P2 offline adapter and maintenance were
+independently audited through `d0e8b91` (38 tests; six passing CI jobs).
+CI is a different evidence category from authenticated Codex or Roblox Studio
+execution.
 
 ## Gate 0 — Explicit authorization
 
@@ -17,7 +18,7 @@ Record the Codex version, operating system, Python version, active working
 directory, and whether the session has any shared user/project configurations.
 Do not copy API keys or `LOCAL.md` secrets into the report.
 
-## Gate 1 — Offline adapter (already tested at P0/P1)
+## Gate 1 — Offline adapter (already tested at P0–P2)
 
 Record the **exact Git SHA** for the checked-out adapter. In an isolated
 temporary workspace and fake HOME, run:

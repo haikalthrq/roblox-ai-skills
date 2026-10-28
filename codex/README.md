@@ -161,15 +161,16 @@ before trusting a parallel build. In particular:
 
 ## What has and has not been verified
 
-The **P0/P1 offline installer and adapter** were independently tested before
-release to `main`: **33 tests passed in the independent Linux audit**
-and **six OS/Python CI jobs succeeded** for
-[`dc18907`](https://github.com/haikalthrq/roblox-ai-skills/commit/dc18907fd3d2591c24939bbe508dbba1ee667c5e).
-The independent auditor could not retrieve per-job test logs; the CI count
-refers to successful jobs, not independently counted tests in every job.
-P2 subsequently passed 37 local offline tests and six CI jobs at
-[`45d6755`](https://github.com/haikalthrq/roblox-ai-skills/commit/45d675545666da06d74bc30b388927039803a3bb).
-That does not establish a live Codex or Studio session. See the
+P0–P2 and maintenance passed independent **offline** audits. At
+[`d0e8b91`](https://github.com/haikalthrq/roblox-ai-skills/commit/d0e8b91f79a55a394b963a91865e3b58cf3a3742),
+the Muse audit passed **38 tests**, and
+[all six CI jobs](https://github.com/haikalthrq/roblox-ai-skills/actions/runs/40638249774)
+succeeded. Earlier audited releases: P1
+[`dc18907`](https://github.com/haikalthrq/roblox-ai-skills/commit/dc18907fd3d2591c24939bbe508dbba1ee667c5e)
+(33 tests) and P2
+[`45d6755`](https://github.com/haikalthrq/roblox-ai-skills/commit/45d675545666da06d74bc30b388927039803a3bb)
+(37 tests). These are commit-specific offline results; live Codex and Studio
+behaviour remains unverified. See the
 [manual runtime evidence checklist](VALIDATION.md).
 
 The adapter is a source-level conversion. Installed copies now adjust
