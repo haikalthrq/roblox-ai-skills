@@ -43,6 +43,8 @@ The installer does not install Roblox Studio, MCP servers, Rojo, Blender, other 
 
 Different stages require different tools: Rojo, Wally, Lune, Selene and StyLua for code; Roblox Studio MCP for Studio tasks; Blender or external services for some assets. The original Kaggle GPU route is disabled. Check tool availability, cost, and asset licenses before use.
 
+`roblox-vfx` now also builds VFX in a browser simulator of Roblox's VFX and exports a Studio kit (upstream `5aad881`). Its texture library (2,000+ textures) and meshes are generated locally on first run and need Python with numpy, scipy and Pillow, plus Blender; follow "First run" in `skills/roblox-vfx/SKILL.md`. Its harvester still ships empty; check each VFX pack's terms before publishing.
+
 ## Codex safety and validation
 
 - Default installation runs stages **sequentially**, with **no custom subagents**. Seven optional TOML agents require explicit risk acceptance in a separately reviewed Studio-free session.
